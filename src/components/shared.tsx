@@ -67,6 +67,16 @@ export function TxRow({
           {cat.label} · {fmtDateShort(tx.date)}
         </div>
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, maxWidth: 130, color: T.inkSoft, fontSize: 10.5 }}>
+        {tx.createdByPhotoURL ? (
+          <img src={tx.createdByPhotoURL} alt="" style={{ width: 16, height: 16, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+        ) : (
+          <span style={{ width: 16, height: 16, borderRadius: "50%", background: T.paperDim, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
+            {(tx.createdByName || "U").charAt(0).toUpperCase()}
+          </span>
+        )}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.createdByName || "Unknown"}</span>
+      </div>
       <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: isIncome ? T.income : T.expense, whiteSpace: "nowrap" }}>
         {isIncome ? "+" : "-"}฿{fmtMoney(tx.amount)}
       </div>

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { FONT_IMPORT, T, todayISO } from "./theme";
 import { Tab } from "./types";
 import { useAuth } from "./contexts/AuthContext";
+import { useBooks } from "./hooks/useBooks";
 import { useTransactions } from "./hooks/useTransactions";
 import { Sidebar, BottomNav, TopHeader, LoadingState } from "./components/Layout";
 import { Login } from "./components/Login";
@@ -9,6 +10,8 @@ import { Dashboard } from "./components/Dashboard";
 import { AddForm } from "./components/AddForm";
 import { DailyView } from "./components/DailyView";
 import { SummaryView } from "./components/SummaryView";
+import { ProfileView } from "./components/ProfileView";
+import { BookSwitcher } from "./components/BookSwitcher";
 
 function GlobalStyle() {
   return (
@@ -57,7 +60,9 @@ export default function App() {
 }
 
 function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOut: () => void; userDisplayObj: NonNullable<ReturnType<typeof useAuth>["user"]> }) {
-  const { transactions, loaded, addTransaction, deleteTransaction } = useTransactions(uid);
+  const { updateUserProfile } = useAuth();
+  const { books, activeBook, loaded: booksLoaded, selectBook, createSharedBook, joinSharedBook, getRememberedBookPassword } = useBooks(uid, userDisplayObj);
+  const { transactions, loaded, addTransaction, deleteTransaction } = useTransactions(uid, activeBook, userDisplayObj);
   const [tab, setTab] = useState<Tab>("dashboard");
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [savedFlash, setSavedFlash] = useState(false);
@@ -81,8 +86,17 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
 
       <main className="sn-main sn-scroll" style={{ flex: 1, marginLeft: 232, minHeight: "100vh", overflowY: "auto" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 20px 40px" }}>
+          <BookSwitcher
+            books={books}
+            activeBook={activeBook}
+            currentUid={uid}
+            onSelect={selectBook}
+            onCreate={createSharedBook}
+            onJoin={joinSharedBook}
+            getRememberedPassword={getRememberedBookPassword}
+          />
           <TopHeader tab={tab} />
-          {!loaded ? (
+          {!booksLoaded || !loaded ? (
             <LoadingState />
           ) : tab === "dashboard" ? (
             <Dashboard transactions={transactions} onSeeAll={() => setTab("summary")} onSeeDay={goToDaily} onAdd={() => setTab("add")} />
@@ -90,6 +104,8 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
             <AddForm onSubmit={handleAdd} savedFlash={savedFlash} />
           ) : tab === "daily" ? (
             <DailyView transactions={transactions} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onDelete={deleteTransaction} />
+          ) : tab === "profile" ? (
+            <ProfileView user={userDisplayObj} onSave={updateUserProfile} />
           ) : (
             <SummaryView transactions={transactions} onSeeDay={goToDaily} />
           )}

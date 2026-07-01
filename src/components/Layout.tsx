@@ -1,5 +1,5 @@
 import React from "react";
-import { BookOpen, LayoutGrid, Calendar, Plus, LogOut } from "lucide-react";
+import { BookOpen, LayoutGrid, Calendar, Plus, LogOut, UserRound } from "lucide-react";
 import { User } from "firebase/auth";
 import { T } from "../theme";
 import { Tab } from "../types";
@@ -36,6 +36,13 @@ export function Sidebar({ tab, setTab, user, onSignOut }: { tab: Tab; setTab: (t
         {NAV_ITEMS.map((item) => (
           <SidebarLink key={item.id} item={item} active={tab === item.id} onClick={() => setTab(item.id)} />
         ))}
+        <button
+          onClick={() => setTab("profile")}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8, border: "none", background: tab === "profile" ? T.ink : "transparent", color: tab === "profile" ? T.paper : T.ink, fontSize: 14, fontWeight: tab === "profile" ? 600 : 500, textAlign: "left" }}
+        >
+          <UserRound size={17} strokeWidth={2} />
+          Profile
+        </button>
       </nav>
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
         <UserChip user={user} />
@@ -86,6 +93,18 @@ export function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void 
       {NAV_ITEMS.map((item) => (
         <BottomNavButton key={item.id} item={item} active={tab === item.id} onClick={() => setTab(item.id)} />
       ))}
+      <button onClick={() => setTab("profile")} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "transparent", border: "none", color: tab === "profile" ? T.ink : T.inkSoft, padding: 4, minWidth: 56 }}>
+        <div
+          style={{
+            width: 28, height: 28, borderRadius: 8,
+            background: tab === "profile" ? T.paperLine : "transparent", color: T.ink,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          <UserRound size={16} strokeWidth={2.2} />
+        </div>
+        <span style={{ fontSize: 10.5, fontWeight: tab === "profile" ? 600 : 500 }}>Profile</span>
+      </button>
     </nav>
   );
 }
@@ -110,7 +129,7 @@ function BottomNavButton({ item, active, onClick }: { item: (typeof NAV_ITEMS)[n
   );
 }
 
-const TITLES: Record<Tab, [string, string]> = {
+const TITLES: Partial<Record<Tab, [string, string]>> = {
   dashboard: ["ภาพรวมบัญชี", "สรุปเงินเข้า-ออกของคุณ"],
   add: ["บันทึกรายการ", "เพิ่มรายรับหรือรายจ่ายใหม่"],
   daily: ["บันทึกรายวัน", "ดูรายการตามวันที่เลือก"],
@@ -118,7 +137,7 @@ const TITLES: Record<Tab, [string, string]> = {
 };
 
 export function TopHeader({ tab }: { tab: Tab }) {
-  const [h, sub] = TITLES[tab];
+  const [h, sub] = TITLES[tab] || ["Profile", "Name and photo shown on saved transactions"];
   return (
     <div style={{ marginBottom: 20 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{h}</h1>

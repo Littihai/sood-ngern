@@ -1,8 +1,177 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // users/{userId}/transactions/{txId}
+    //   type: string, "income" | "expense"
+    //   amount: number, > 0
+    //   category: string, 1..40 chars
+    //   note: string, <= 500 chars
+    //   date: string, YYYY-MM-DD
+    //   createdAt: number, epoch ms
+    //   createdByUid: string, immutable creator uid
+    //   createdByName: string, 1..100 chars
+    //   createdByPhotoURL: string, empty or http(s) URL
+    //
+    // books/{bookId}
+    //   name: string, 1..80 chars
+    //   ownerUid: string, immutable owner uid
+    //   ownerName: string, 1..100 chars
+    //   joinPassword: string, 4..80 chars
+    //   memberIds: list<string>, max 50
+    //   members: map<uid, BookMember>, max 50
+    //   createdAt: number, epoch ms
+    //   updatedAt: number, epoch ms
+    //
+    // books/{bookId}/transactions/{txId}
+    //   same fields as transaction above, readable/writable by book members.
+    //
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function validString(data, field, minLen, maxLen) {
+      return data[field] is string &&
+        data[field].size() >= minLen &&
+        data[field].size() <= maxLen;
+    }
+
+    function validOptionalUrl(data, field) {
+      return data[field] is string &&
+        data[field].size() <= 500 &&
+        (data[field] == "" || data[field].matches("^https?://.*"));
+    }
+
+    function validEpochMs(data, field) {
+      return data[field] is number &&
+        data[field] > 0 &&
+        data[field] < 4102444800000;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasOnly([
+          "type", "amount", "category", "note", "date", "createdAt",
+          "createdByUid", "createdByName", "createdByPhotoURL"
+        ]) &&
+        data.keys().hasAll([
+          "type", "amount", "category", "note", "date", "createdAt",
+          "createdByUid", "createdByName", "createdByPhotoURL"
+        ]) &&
+        data.type in ["income", "expense"] &&
+        data.amount is number &&
+        data.amount > 0 &&
+        data.amount < 1000000000 &&
+        validString(data, "category", 1, 40) &&
+        validString(data, "note", 0, 500) &&
+        data.date is string &&
+        data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
+        validEpochMs(data, "createdAt") &&
+        data.createdByUid == request.auth.uid &&
+        validString(data, "createdByName", 1, 100) &&
+        validOptionalUrl(data, "createdByPhotoURL");
+    }
+
+    function txImmutableFieldsUnchanged() {
+      return request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.createdByUid == resource.data.createdByUid;
+    }
+
+    function isValidMember(member, role) {
+      return member is map &&
+        member.keys().hasOnly(["name", "photoURL", "role", "joinedAt"]) &&
+        member.keys().hasAll(["name", "photoURL", "role", "joinedAt"]) &&
+        member.name is string &&
+        member.name.size() >= 1 &&
+        member.name.size() <= 100 &&
+        member.photoURL is string &&
+        member.photoURL.size() <= 500 &&
+        (member.photoURL == "" || member.photoURL.matches("^https?://.*")) &&
+        member.role == role &&
+        member.joinedAt is number &&
+        member.joinedAt > 0 &&
+        member.joinedAt < 4102444800000;
+    }
+
+    function isValidCreatedBook(data) {
+      return data.keys().hasOnly([
+          "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
+          "members", "createdAt", "updatedAt"
+        ]) &&
+        data.keys().hasAll([
+          "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
+          "members", "createdAt", "updatedAt"
+        ]) &&
+        validString(data, "name", 1, 80) &&
+        data.ownerUid == request.auth.uid &&
+        validString(data, "ownerName", 1, 100) &&
+        validString(data, "joinPassword", 4, 80) &&
+        data.memberIds is list &&
+        data.memberIds.size() == 1 &&
+        data.memberIds[0] == request.auth.uid &&
+        data.members is map &&
+        data.members.keys().hasOnly([request.auth.uid]) &&
+        isValidMember(data.members[request.auth.uid], "owner") &&
+        validEpochMs(data, "createdAt") &&
+        validEpochMs(data, "updatedAt");
+    }
+
+    function isBookMember(data) {
+      return isAuthenticated() &&
+        data.memberIds is list &&
+        request.auth.uid in data.memberIds;
+    }
+
+    function isBookMemberById(bookId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/books/$(bookId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/books/$(bookId)).data.memberIds;
+    }
+
+    function isValidBookJoin() {
+      return isAuthenticated() &&
+        !(request.auth.uid in resource.data.memberIds) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "members", "memberIds", "joinPassword", "updatedAt"
+        ]) &&
+        request.resource.data.joinPassword == resource.data.joinPassword &&
+        request.resource.data.memberIds is list &&
+        request.auth.uid in request.resource.data.memberIds &&
+        request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+        request.resource.data.members is map &&
+        request.auth.uid in request.resource.data.members.keys() &&
+        request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid]) &&
+        isValidMember(request.resource.data.members[request.auth.uid], "member") &&
+        validEpochMs(request.resource.data, "updatedAt");
+    }
+
     match /users/{userId}/transactions/{txId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidTransaction(request.resource.data);
+      allow update: if isOwner(userId) && isValidTransaction(request.resource.data) && txImmutableFieldsUnchanged();
+      allow delete: if isOwner(userId);
+    }
+
+    match /books/{bookId} {
+      allow create: if isAuthenticated() && isValidCreatedBook(request.resource.data);
+      allow read: if isBookMember(resource.data);
+      allow update: if isValidBookJoin();
+      allow delete: if false;
+
+      match /transactions/{txId} {
+        allow read: if isBookMemberById(bookId);
+        allow create: if isBookMemberById(bookId) && isValidTransaction(request.resource.data);
+        allow update: if isBookMemberById(bookId) && isValidTransaction(request.resource.data) && txImmutableFieldsUnchanged();
+        allow delete: if isBookMemberById(bookId);
+      }
     }
   }
 }

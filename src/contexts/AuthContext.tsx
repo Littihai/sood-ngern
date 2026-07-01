@@ -3,6 +3,7 @@ import {
   onAuthStateChanged,
   signInWithPopup,
   signOut as firebaseSignOut,
+  updateProfile,
   User,
 } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
@@ -12,6 +13,7 @@ interface AuthContextValue {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  updateUserProfile: (profile: { displayName: string; photoURL: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -33,11 +35,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (typeof window !== "undefined") {
+      Object.keys(window.localStorage).forEach((key) => {
+        if (key.startsWith("sood-ngern-active-book-") || key === "sood-ngern-book-passwords") {
+          window.localStorage.removeItem(key);
+        }
+      });
+    }
     await firebaseSignOut(auth);
   };
 
+  const updateUserProfile = async ({ displayName, photoURL }: { displayName: string; photoURL: string }) => {
+    if (!auth.currentUser) return;
+    await updateProfile(auth.currentUser, {
+      displayName: displayName.trim() || null,
+      photoURL: photoURL.trim() || null,
+    });
+    await auth.currentUser.reload();
+    setUser(auth.currentUser ? ({ ...auth.currentUser } as User) : null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut, updateUserProfile }}>
       {children}
     </AuthContext.Provider>
   );

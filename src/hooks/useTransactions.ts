@@ -9,27 +9,43 @@ import {
   query,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { NewTransaction, Transaction } from "../types";
+import { ActiveBook, NewTransaction, Transaction } from "../types";
 
-export function useTransactions(uid: string | undefined) {
+export function useTransactions(
+  uid: string | undefined,
+  activeBook: ActiveBook | null,
+  profile?: { displayName: string | null; email: string | null; photoURL: string | null }
+) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!uid) {
+    if (!uid || !activeBook) {
       setTransactions([]);
       setLoaded(true);
       return;
     }
     setLoaded(false);
+    const txCollection =
+      activeBook.kind === "personal"
+        ? collection(db, "users", uid, "transactions")
+        : collection(db, "books", activeBook.id, "transactions");
     const q = query(
-      collection(db, "users", uid, "transactions"),
+      txCollection,
       orderBy("createdAt", "desc")
     );
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Transaction));
+        const rows = snap.docs.map((d) => {
+          const tx = { id: d.id, ...d.data() } as Transaction;
+          return {
+            ...tx,
+            createdByUid: tx.createdByUid || uid,
+            createdByName: tx.createdByName || profile?.displayName || profile?.email || "Unknown user",
+            createdByPhotoURL: tx.createdByPhotoURL || profile?.photoURL || "",
+          };
+        });
         setTransactions(rows);
         setLoaded(true);
       },
@@ -39,25 +55,36 @@ export function useTransactions(uid: string | undefined) {
       }
     );
     return unsub;
-  }, [uid]);
+  }, [uid, activeBook, profile?.displayName, profile?.email, profile?.photoURL]);
 
   const addTransaction = useCallback(
     async (tx: NewTransaction) => {
-      if (!uid) return;
-      await addDoc(collection(db, "users", uid, "transactions"), {
+      if (!uid || !activeBook) return;
+      const txCollection =
+        activeBook.kind === "personal"
+          ? collection(db, "users", uid, "transactions")
+          : collection(db, "books", activeBook.id, "transactions");
+      await addDoc(txCollection, {
         ...tx,
         createdAt: Date.now(),
+        createdByUid: uid,
+        createdByName: profile?.displayName || profile?.email || "Unknown user",
+        createdByPhotoURL: profile?.photoURL || "",
       });
     },
-    [uid]
+    [uid, activeBook, profile?.displayName, profile?.email, profile?.photoURL]
   );
 
   const deleteTransaction = useCallback(
     async (id: string) => {
-      if (!uid) return;
-      await deleteDoc(doc(db, "users", uid, "transactions", id));
+      if (!uid || !activeBook) return;
+      const txDoc =
+        activeBook.kind === "personal"
+          ? doc(db, "users", uid, "transactions", id)
+          : doc(db, "books", activeBook.id, "transactions", id);
+      await deleteDoc(txDoc);
     },
-    [uid]
+    [uid, activeBook]
   );
 
   return { transactions, loaded, addTransaction, deleteTransaction };
