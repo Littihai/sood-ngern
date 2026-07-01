@@ -1,6 +1,8 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
     // ===============================================================
     // Assumed Data Model
     // ===============================================================
@@ -59,25 +61,25 @@ service cloud.firestore {
 
     function isValidTransaction(data) {
       return data.keys().hasOnly([
-          "type", "amount", "category", "note", "date", "createdAt",
-          "createdByUid", "createdByName", "createdByPhotoURL"
-        ]) &&
-        data.keys().hasAll([
-          "type", "amount", "category", "note", "date", "createdAt",
-          "createdByUid", "createdByName", "createdByPhotoURL"
-        ]) &&
-        data.type in ["income", "expense"] &&
-        data.amount is number &&
-        data.amount > 0 &&
-        data.amount < 1000000000 &&
-        validString(data, "category", 1, 40) &&
-        validString(data, "note", 0, 500) &&
-        data.date is string &&
-        data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
-        validEpochMs(data, "createdAt") &&
-        data.createdByUid == request.auth.uid &&
-        validString(data, "createdByName", 1, 100) &&
-        validOptionalUrl(data, "createdByPhotoURL");
+        "type", "amount", "category", "note", "date", "createdAt",
+        "createdByUid", "createdByName", "createdByPhotoURL"
+      ]) &&
+      data.keys().hasAll([
+        "type", "amount", "category", "note", "date", "createdAt",
+        "createdByUid", "createdByName", "createdByPhotoURL"
+      ]) &&
+      data.type in ["income", "expense"] &&
+      data.amount is number &&
+      data.amount > 0 &&
+      data.amount < 1000000000 &&
+      validString(data, "category", 1, 40) &&
+      validString(data, "note", 0, 500) &&
+      data.date is string &&
+      data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
+      validEpochMs(data, "createdAt") &&
+      data.createdByUid == request.auth.uid &&
+      validString(data, "createdByName", 1, 100) &&
+      validOptionalUrl(data, "createdByPhotoURL");
     }
 
     function txImmutableFieldsUnchanged() {
@@ -121,25 +123,25 @@ service cloud.firestore {
 
     function isValidCreatedBook(data) {
       return data.keys().hasOnly([
-          "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
-          "members", "createdAt", "updatedAt"
-        ]) &&
-        data.keys().hasAll([
-          "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
-          "members", "createdAt", "updatedAt"
-        ]) &&
-        validString(data, "name", 1, 80) &&
-        data.ownerUid == request.auth.uid &&
-        validString(data, "ownerName", 1, 100) &&
-        validString(data, "joinPassword", 4, 80) &&
-        data.memberIds is list &&
-        data.memberIds.size() == 1 &&
-        data.memberIds[0] == request.auth.uid &&
-        data.members is map &&
-        data.members.keys().hasOnly([request.auth.uid]) &&
-        isValidMember(data.members[request.auth.uid], "owner") &&
-        validEpochMs(data, "createdAt") &&
-        validEpochMs(data, "updatedAt");
+        "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
+        "members", "createdAt", "updatedAt"
+      ]) &&
+      data.keys().hasAll([
+        "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
+        "members", "createdAt", "updatedAt"
+      ]) &&
+      validString(data, "name", 1, 80) &&
+      data.ownerUid == request.auth.uid &&
+      validString(data, "ownerName", 1, 100) &&
+      validString(data, "joinPassword", 4, 80) &&
+      data.memberIds is list &&
+      data.memberIds.size() == 1 &&
+      data.memberIds[0] == request.auth.uid &&
+      data.members is map &&
+      data.members.keys().hasOnly([request.auth.uid]) &&
+      isValidMember(data.members[request.auth.uid], "owner") &&
+      validEpochMs(data, "createdAt") &&
+      validEpochMs(data, "updatedAt");
     }
 
     function isBookMember(data) {
@@ -154,6 +156,9 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/books/$(bookId)).data.memberIds;
     }
 
+    // Covers a user who is NOT a member yet, joining with the correct password.
+    // Only "members", "memberIds", "updatedAt" may change, the new member entry
+    // must be a valid "viewer", and the caller must add exactly themself.
     function isValidBookJoin() {
       return isAuthenticated() &&
         !(request.auth.uid in resource.data.memberIds) &&
@@ -207,13 +212,22 @@ service cloud.firestore {
 
     match /books/{bookId} {
       allow create: if isAuthenticated() && isValidCreatedBook(request.resource.data);
+
       allow read: if isAuthenticated() && (
         isBookMember(resource.data) || resource.data.keys().hasAll(["ownerUid", "joinPassword", "memberIds"])
       );
+
       allow list: if isAuthenticated();
-      allow update: if isBookMember(resource.data) && (
-        isBookOwner(bookId) || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["members", "memberIds", "updatedAt"]) && isValidBookJoin())
-      );
+
+      // FIX: previously required `isBookMember(resource.data)` for every update,
+      // including the join case — but someone joining is, by definition, not yet
+      // a member, so that AND made joining impossible for everyone. Now it's:
+      // owner-writes OR a valid join (isValidBookJoin already enforces that the
+      // caller isn't already a member and only touches members/memberIds/updatedAt).
+      allow update: if
+        (isBookMember(resource.data) && isBookOwner(bookId)) ||
+        isValidBookJoin();
+
       allow delete: if false;
 
       match /transactions/{txId} {

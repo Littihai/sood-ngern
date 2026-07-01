@@ -87,23 +87,6 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
 
       <main className="sn-main sn-scroll" style={{ flex: 1, marginLeft: 232, minHeight: "100vh", overflowY: "auto" }}>
         <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 20px 40px" }}>
-          <BookSwitcher
-            books={books}
-            activeBook={activeBook}
-            currentUid={uid}
-            onSelect={selectBook}
-            onCreate={createSharedBook}
-            onJoin={joinSharedBook}
-            onApproveRequest={approveJoinRequest}
-            onRejectRequest={rejectJoinRequest}
-            onChangeMemberRole={changeMemberRole}
-            onRemoveMember={removeMember}
-            onLeaveBook={leaveBook}
-            onUpdateBookName={updateBookName}
-            onUpdateBookPassword={updateBookPassword}
-            onDeleteBook={deleteBook}
-            getRememberedPassword={getRememberedBookPassword}
-          />
           <TopHeader tab={tab} />
           {!booksLoaded || !loaded ? (
             <LoadingState />
@@ -121,7 +104,26 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
           ) : tab === "daily" ? (
             <DailyView transactions={transactions} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onDelete={deleteTransaction} />
           ) : tab === "profile" ? (
-            <ProfileView user={userDisplayObj} onSave={updateUserProfile} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <ProfileView user={userDisplayObj} onSave={updateUserProfile} />
+              <BookSwitcher
+                books={books}
+                activeBook={activeBook}
+                currentUid={uid}
+                onSelect={selectBook}
+                onCreate={createSharedBook}
+                onJoin={joinSharedBook}
+                onApproveRequest={approveJoinRequest}
+                onRejectRequest={rejectJoinRequest}
+                onChangeMemberRole={changeMemberRole}
+                onRemoveMember={removeMember}
+                onLeaveBook={leaveBook}
+                onUpdateBookName={updateBookName}
+                onUpdateBookPassword={updateBookPassword}
+                onDeleteBook={deleteBook}
+                getRememberedPassword={getRememberedBookPassword}
+              />
+            </div>
           ) : (
             <SummaryView transactions={transactions} onSeeDay={goToDaily} />
           )}
