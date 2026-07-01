@@ -33,7 +33,7 @@ export const EXPENSE_CATS: Category[] = [
   { id: "shopping", label: "ช้อปปิ้ง", icon: ShoppingBag, color: "#A6467A" },
   { id: "bills", label: "บิล/ประจำ", icon: Receipt, color: "#4A5C8A" },
   { id: "fun", label: "บันเทิง", icon: Film, color: "#7B4FA0" },
-  { id: "health", label: "สุขภาพ", icon: HeartPulse, color: "#C2504F" },
+  { id: "health", label: "ของขาย", icon: HeartPulse, color: "#C2504F" },
   { id: "edu", label: "การศึกษา", icon: GraduationCap, color: "#2E7D6B" },
   { id: "other_e", label: "อื่นๆ", icon: MoreHorizontal, color: "#8A8577" },
 ];
