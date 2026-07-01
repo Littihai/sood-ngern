@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { LogOut } from "lucide-react";
 import { FONT_IMPORT, T, todayISO } from "./theme";
 import { Tab } from "./types";
 import { useAuth } from "./contexts/AuthContext";
@@ -26,10 +27,12 @@ function GlobalStyle() {
       .ledger-lines {
         background-image: repeating-linear-gradient(to bottom, transparent, transparent 27px, ${T.paperLine} 28px);
       }
+      .sn-mobile-signout { display: none; }
       @media (max-width: 767px) {
         .sn-sidebar { display: none !important; }
         .sn-bottomnav { display: flex !important; }
         .sn-main { padding-bottom: 84px !important; margin-left: 0 !important; }
+        .sn-mobile-signout { display: flex !important; }
       }
     `}</style>
   );
@@ -106,6 +109,16 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
           ) : tab === "profile" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <ProfileView user={userDisplayObj} onSave={updateUserProfile} />
+              <button
+                onClick={onSignOut}
+                className="sn-mobile-signout"
+                style={{
+                  alignItems: "center", gap: 8, background: T.paper, border: `1px solid ${T.paperLine}`,
+                  borderRadius: 12, padding: "12px 14px", fontSize: 14, color: T.expense, fontWeight: 600, justifyContent: "center",
+                }}
+              >
+                <LogOut size={16} /> ออกจากระบบ
+              </button>
               <BookSwitcher
                 books={books}
                 activeBook={activeBook}
