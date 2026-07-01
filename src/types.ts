@@ -15,11 +15,26 @@ export interface Transaction {
 
 export type NewTransaction = Omit<Transaction, "id" | "createdAt">;
 
+export type BookRole = "owner" | "editor" | "viewer";
+
 export interface BookMember {
   name: string;
   photoURL: string;
-  role: "owner" | "member";
+  role: BookRole;
   joinedAt: number;
+}
+
+export interface JoinRequest {
+  id: string;
+  bookId: string;
+  bookName?: string;
+  requesterUid: string;
+  requesterName: string;
+  requesterPhotoURL: string;
+  requestedAt: number;
+  role: BookRole;
+  status: "pending" | "approved" | "rejected";
+  joinPassword?: string;
 }
 
 export interface SharedBook {

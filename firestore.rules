@@ -95,10 +95,28 @@ service cloud.firestore {
         member.photoURL is string &&
         member.photoURL.size() <= 500 &&
         (member.photoURL == "" || member.photoURL.matches("^https?://.*")) &&
+        member.role in ["owner", "editor", "viewer"] &&
         member.role == role &&
         member.joinedAt is number &&
         member.joinedAt > 0 &&
         member.joinedAt < 4102444800000;
+    }
+
+    function bookMemberRole(bookId) {
+      return get(/databases/$(database)/documents/books/$(bookId)).data.members[request.auth.uid].role;
+    }
+
+    function isBookOwner(bookId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/books/$(bookId)) &&
+        get(/databases/$(database)/documents/books/$(bookId)).data.ownerUid == request.auth.uid;
+    }
+
+    function canWriteBook(bookId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/books/$(bookId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/books/$(bookId)).data.memberIds &&
+        (bookMemberRole(bookId) == "owner" || bookMemberRole(bookId) == "editor");
     }
 
     function isValidCreatedBook(data) {
@@ -140,16 +158,15 @@ service cloud.firestore {
       return isAuthenticated() &&
         !(request.auth.uid in resource.data.memberIds) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          "members", "memberIds", "joinPassword", "updatedAt"
+          "members", "memberIds", "updatedAt"
         ]) &&
-        request.resource.data.joinPassword == resource.data.joinPassword &&
         request.resource.data.memberIds is list &&
         request.auth.uid in request.resource.data.memberIds &&
         request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
         request.resource.data.members is map &&
         request.auth.uid in request.resource.data.members.keys() &&
         request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid]) &&
-        isValidMember(request.resource.data.members[request.auth.uid], "member") &&
+        isValidMember(request.resource.data.members[request.auth.uid], "viewer") &&
         validEpochMs(request.resource.data, "updatedAt");
     }
 
@@ -160,17 +177,80 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    match /joinRequests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource.data.requesterUid == request.auth.uid ||
+        (exists(/databases/$(database)/documents/books/$(resource.data.bookId)) && get(/databases/$(database)/documents/books/$(resource.data.bookId)).data.ownerUid == request.auth.uid)
+      );
+      allow create: if isAuthenticated() &&
+        request.resource.data.keys().hasOnly(["bookId", "bookName", "requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
+        request.resource.data.keys().hasAll(["bookId", "bookName", "requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
+        request.resource.data.requesterUid == request.auth.uid &&
+        request.resource.data.bookId is string &&
+        request.resource.data.bookId.size() > 0 &&
+        request.resource.data.bookName is string &&
+        request.resource.data.requesterName is string &&
+        request.resource.data.requesterPhotoURL is string &&
+        request.resource.data.requestedAt is number &&
+        request.resource.data.requestedAt > 0 &&
+        request.resource.data.role in ["editor", "viewer"] &&
+        request.resource.data.status == "pending" &&
+        request.resource.data.joinPassword is string &&
+        request.resource.data.joinPassword.size() >= 4 &&
+        request.resource.data.joinPassword.size() <= 80 &&
+        exists(/databases/$(database)/documents/books/$(request.resource.data.bookId)) &&
+        get(/databases/$(database)/documents/books/$(request.resource.data.bookId)).data.joinPassword == request.resource.data.joinPassword;
+      allow update: if isAuthenticated() &&
+        (exists(/databases/$(database)/documents/books/$(resource.data.bookId)) && get(/databases/$(database)/documents/books/$(resource.data.bookId)).data.ownerUid == request.auth.uid);
+      allow delete: if false;
+    }
+
     match /books/{bookId} {
       allow create: if isAuthenticated() && isValidCreatedBook(request.resource.data);
-      allow read: if isBookMember(resource.data);
-      allow update: if isValidBookJoin();
+      allow read: if isAuthenticated() && (
+        isBookMember(resource.data) || resource.data.keys().hasAll(["ownerUid", "joinPassword", "memberIds"])
+      );
+      allow list: if isAuthenticated();
+      allow update: if isBookMember(resource.data) && (
+        isBookOwner(bookId) || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["members", "memberIds", "updatedAt"]) && isValidBookJoin())
+      );
       allow delete: if false;
 
       match /transactions/{txId} {
         allow read: if isBookMemberById(bookId);
-        allow create: if isBookMemberById(bookId) && isValidTransaction(request.resource.data);
-        allow update: if isBookMemberById(bookId) && isValidTransaction(request.resource.data) && txImmutableFieldsUnchanged();
-        allow delete: if isBookMemberById(bookId);
+        allow create: if canWriteBook(bookId) && isValidTransaction(request.resource.data);
+        allow update: if canWriteBook(bookId) && isValidTransaction(request.resource.data) && txImmutableFieldsUnchanged();
+        allow delete: if canWriteBook(bookId);
+      }
+
+      match /joinRequests/{requestId} {
+        function canCreateJoinRequest() {
+          return isAuthenticated() &&
+            exists(/databases/$(database)/documents/books/$(bookId)) &&
+            !(request.auth.uid in get(/databases/$(database)/documents/books/$(bookId)).data.memberIds) &&
+            request.resource.data.keys().hasOnly(["requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
+            request.resource.data.keys().hasAll(["requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
+            request.resource.data.requesterUid == request.auth.uid &&
+            request.resource.data.requesterName is string &&
+            request.resource.data.requesterName.size() >= 1 &&
+            request.resource.data.requesterName.size() <= 100 &&
+            request.resource.data.requesterPhotoURL is string &&
+            request.resource.data.requesterPhotoURL.size() <= 500 &&
+            (request.resource.data.requesterPhotoURL == "" || request.resource.data.requesterPhotoURL.matches("^https?://.*")) &&
+            request.resource.data.requestedAt is number &&
+            request.resource.data.requestedAt > 0 &&
+            request.resource.data.requestedAt < 4102444800000 &&
+            request.resource.data.role in ["editor", "viewer"] &&
+            request.resource.data.status == "pending" &&
+            request.resource.data.joinPassword is string &&
+            request.resource.data.joinPassword.size() >= 4 &&
+            request.resource.data.joinPassword.size() <= 80 &&
+            request.resource.data.joinPassword == get(/databases/$(database)/documents/books/$(bookId)).data.joinPassword;
+        }
+
+        allow read: if isBookOwner(bookId) || (isAuthenticated() && resource.data.requesterUid == request.auth.uid);
+        allow create: if canCreateJoinRequest();
+        allow update: if isBookOwner(bookId);
       }
     }
   }

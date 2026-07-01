@@ -61,8 +61,9 @@ export default function App() {
 
 function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOut: () => void; userDisplayObj: NonNullable<ReturnType<typeof useAuth>["user"]> }) {
   const { updateUserProfile } = useAuth();
-  const { books, activeBook, loaded: booksLoaded, selectBook, createSharedBook, joinSharedBook, getRememberedBookPassword } = useBooks(uid, userDisplayObj);
+  const { books, activeBook, loaded: booksLoaded, selectBook, createSharedBook, joinSharedBook, approveJoinRequest, rejectJoinRequest, changeMemberRole, removeMember, leaveBook, updateBookName, updateBookPassword, deleteBook, getRememberedBookPassword } = useBooks(uid, userDisplayObj);
   const { transactions, loaded, addTransaction, deleteTransaction } = useTransactions(uid, activeBook, userDisplayObj);
+  const canWriteTransactions = activeBook?.kind === "personal" || (activeBook?.kind === "shared" && (activeBook.members[uid]?.role === "owner" || activeBook.members[uid]?.role === "editor"));
   const [tab, setTab] = useState<Tab>("dashboard");
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [savedFlash, setSavedFlash] = useState(false);
@@ -93,6 +94,14 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
             onSelect={selectBook}
             onCreate={createSharedBook}
             onJoin={joinSharedBook}
+            onApproveRequest={approveJoinRequest}
+            onRejectRequest={rejectJoinRequest}
+            onChangeMemberRole={changeMemberRole}
+            onRemoveMember={removeMember}
+            onLeaveBook={leaveBook}
+            onUpdateBookName={updateBookName}
+            onUpdateBookPassword={updateBookPassword}
+            onDeleteBook={deleteBook}
             getRememberedPassword={getRememberedBookPassword}
           />
           <TopHeader tab={tab} />
@@ -101,7 +110,14 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
           ) : tab === "dashboard" ? (
             <Dashboard transactions={transactions} onSeeAll={() => setTab("summary")} onSeeDay={goToDaily} onAdd={() => setTab("add")} />
           ) : tab === "add" ? (
-            <AddForm onSubmit={handleAdd} savedFlash={savedFlash} />
+            canWriteTransactions ? (
+              <AddForm onSubmit={handleAdd} savedFlash={savedFlash} />
+            ) : (
+              <div style={{ border: `1px solid ${T.paperLine}`, borderRadius: 12, padding: 18, background: T.paper }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>คุณมีสิทธิ์ดูอย่างเดียวในสมุดนี้</div>
+                <div style={{ color: T.inkSoft, fontSize: 14 }}>เฉพาะ Owner หรือ Editor เท่านั้นที่สามารถบันทึกรายการใหม่ได้</div>
+              </div>
+            )
           ) : tab === "daily" ? (
             <DailyView transactions={transactions} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onDelete={deleteTransaction} />
           ) : tab === "profile" ? (

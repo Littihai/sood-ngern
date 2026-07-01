@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { BookOpen, Lock, Plus, Users } from "lucide-react";
-import { ActiveBook } from "../types";
+import { useEffect, useState } from "react";
+import { BookOpen, ChevronDown, ChevronUp, Lock, Plus, Users } from "lucide-react";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../firebase";
+import { ActiveBook, BookRole } from "../types";
 import { T } from "../theme";
 import { inputStyle, primaryBtn } from "./shared";
 
@@ -11,6 +13,14 @@ export function BookSwitcher({
   onSelect,
   onCreate,
   onJoin,
+  onApproveRequest,
+  onRejectRequest,
+  onChangeMemberRole,
+  onRemoveMember,
+  onLeaveBook,
+  onUpdateBookName,
+  onUpdateBookPassword,
+  onDeleteBook,
   getRememberedPassword,
 }: {
   books: ActiveBook[];
@@ -19,6 +29,14 @@ export function BookSwitcher({
   onSelect: (book: ActiveBook) => void;
   onCreate: (name: string, password: string, rememberPassword: boolean) => Promise<void>;
   onJoin: (bookId: string, password: string, rememberPassword: boolean) => Promise<void>;
+  onApproveRequest: (bookId: string, requestId: string, role: BookRole) => Promise<void>;
+  onRejectRequest: (bookId: string, requestId: string) => Promise<void>;
+  onChangeMemberRole: (bookId: string, targetUid: string, role: BookRole) => Promise<void>;
+  onRemoveMember: (bookId: string, targetUid: string) => Promise<void>;
+  onLeaveBook: (bookId: string) => Promise<void>;
+  onUpdateBookName: (bookId: string, name: string) => Promise<void>;
+  onUpdateBookPassword: (bookId: string, password: string) => Promise<void>;
+  onDeleteBook: (bookId: string) => Promise<void>;
   getRememberedPassword?: (bookId: string) => string;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -32,6 +50,11 @@ export function BookSwitcher({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [accessBook, setAccessBook] = useState<ActiveBook | null>(null);
+  const [bookSettingsOpen, setBookSettingsOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(true);
+  const [noticeMessage, setNoticeMessage] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   const createValidationMessage = !name.trim()
     ? "กรุณากรอกชื่อสมุดบัญชี"
@@ -47,9 +70,11 @@ export function BookSwitcher({
 
   const accessValidationMessage = !accessPassword.trim() ? "กรุณากรอกรหัสผ่านก่อนเปิดสมุดบัญชี" : "";
 
-  const run = async (task: () => Promise<void>) => {
+
+  const run = async (task: () => Promise<void>, successMessage?: string) => {
     setBusy(true);
     setError("");
+    setNoticeMessage("");
     try {
       await task();
       setName("");
@@ -61,6 +86,9 @@ export function BookSwitcher({
       setJoinOpen(false);
       setAccessBook(null);
       setRememberPassword(true);
+      if (successMessage) {
+        setNoticeMessage(successMessage);
+      }
     } catch (err) {
       console.error(err);
       const message = err instanceof Error ? err.message : "";
@@ -117,6 +145,7 @@ export function BookSwitcher({
             setCreateOpen((v) => !v);
             setJoinOpen(false);
             setError("");
+            setNoticeMessage("");
           }}
           style={{ ...primaryBtn, padding: "9px 12px" }}
         >
@@ -128,6 +157,7 @@ export function BookSwitcher({
             setJoinOpen((v) => !v);
             setCreateOpen(false);
             setError("");
+            setNoticeMessage("");
           }}
           style={{ ...primaryBtn, padding: "9px 12px", background: T.gold }}
         >
@@ -160,7 +190,7 @@ export function BookSwitcher({
                   setError(accessValidationMessage);
                   return;
                 }
-                run(() => onJoin(accessBook.id, accessPassword, rememberPassword));
+                run(() => onJoin(accessBook.id, accessPassword, rememberPassword), "เข้าร่วมสมุดบัญชีสำเร็จแล้ว");
               }}
               style={{ ...primaryBtn, justifyContent: "center", opacity: busy || !!accessValidationMessage ? 0.55 : 1 }}
             >
@@ -171,10 +201,82 @@ export function BookSwitcher({
       )}
 
       {activeBook?.kind === "shared" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, color: T.inkSoft, fontSize: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, color: T.inkSoft, fontSize: 12, flexWrap: "wrap" }}>
           <Users size={14} />
           <span>{activeBook.memberIds.length} members</span>
           <span className="mono" style={{ marginLeft: "auto" }}>ID: {activeBook.id}</span>
+          {currentUid === activeBook.ownerUid && (
+            <button onClick={() => { setBookSettingsOpen((v) => !v); setRenameValue(activeBook.name); setNewPassword(""); setError(""); }} style={{ ...primaryBtn, padding: "7px 10px" }}>
+              ตั้งค่า
+            </button>
+          )}
+        </div>
+      )}
+
+      {activeBook?.kind === "shared" && bookSettingsOpen && currentUid === activeBook.ownerUid && (
+        <div style={{ marginTop: 10, border: `1px solid ${T.paperLine}`, borderRadius: 10, padding: 10, background: T.paperDim }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>จัดการสมุดบัญชี</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <Field label="เปลี่ยนชื่อสมุดบัญชี">
+              <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} placeholder="ชื่อใหม่" style={inputStyle} />
+            </Field>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => run(() => onUpdateBookName(activeBook.id, renameValue))} style={{ ...primaryBtn, padding: "8px 10px" }}>บันทึกชื่อ</button>
+              <button onClick={() => run(() => onUpdateBookPassword(activeBook.id, newPassword))} style={{ ...primaryBtn, padding: "8px 10px", background: T.gold }}>เปลี่ยนรหัสผ่าน</button>
+            </div>
+            <Field label="รหัสผ่านใหม่">
+              <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} type="password" placeholder="อย่างน้อย 4 ตัวอักษร" style={inputStyle} />
+            </Field>
+            <button onClick={() => run(() => onDeleteBook(activeBook.id))} style={{ ...primaryBtn, padding: "8px 10px", background: T.expense, color: T.paper }}>ลบสมุดบัญชี</button>
+          </div>
+        </div>
+      )}
+
+      {activeBook?.kind === "shared" && (
+        <div style={{ marginTop: 12, border: `1px solid ${T.paperLine}`, borderRadius: 10, padding: 10, background: T.paperDim }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: membersOpen ? 8 : 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>สมาชิกในสมุด</div>
+            <button
+              type="button"
+              onClick={() => setMembersOpen((v) => !v)}
+              style={{ border: "none", background: "transparent", color: T.inkSoft, cursor: "pointer", display: "flex", alignItems: "center" }}
+              aria-label={membersOpen ? "ย่อรายชื่อสมาชิก" : "ขยายรายชื่อสมาชิก"}
+            >
+              {membersOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
+          {membersOpen && (
+            <>
+              {Object.entries(activeBook.members).map(([memberUid, member]) => (
+                <div key={memberUid} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 0", borderTop: `1px solid ${T.paperLine}` }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{member.name}</div>
+                    <div style={{ fontSize: 11, color: T.inkSoft }}>{member.role}</div>
+                  </div>
+                  {currentUid === activeBook.ownerUid && memberUid !== activeBook.ownerUid && (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <select
+                        value={member.role}
+                        onChange={(e) => run(() => onChangeMemberRole(activeBook.id, memberUid, e.target.value as BookRole))}
+                        style={{ ...inputStyle, marginTop: 0, minWidth: 100, width: 100 }}
+                      >
+                        <option value="editor">Editor</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                      <button onClick={() => run(() => onRemoveMember(activeBook.id, memberUid))} style={{ ...primaryBtn, padding: "7px 10px", background: T.expense, color: T.paper }}>
+                        ลบ
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {currentUid !== activeBook.ownerUid && (
+                <button onClick={() => run(() => onLeaveBook(activeBook.id))} style={{ ...primaryBtn, padding: "7px 10px", background: T.expense, color: T.paper, marginTop: 8 }}>
+                  ออกจากสมุดบัญชี
+                </button>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -229,7 +331,7 @@ export function BookSwitcher({
                     setError(joinValidationMessage);
                     return;
                   }
-                  run(() => onJoin(bookId, joinPassword, rememberPassword));
+                  run(() => onJoin(bookId, joinPassword, rememberPassword), "เข้าร่วมสมุดบัญชีสำเร็จแล้ว");
                 }}
                 style={{ ...primaryBtn, justifyContent: "center", background: T.gold, opacity: busy || !!joinValidationMessage ? 0.55 : 1 }}
               >
@@ -240,6 +342,11 @@ export function BookSwitcher({
         </div>
       )}
 
+      {noticeMessage && (
+        <div style={{ marginTop: 10, border: `1px solid ${T.paperLine}`, borderRadius: 10, padding: "8px 10px", background: T.paperDim, color: T.ink, fontSize: 12, fontWeight: 600 }}>
+          {noticeMessage}
+        </div>
+      )}
       {error && <div style={{ color: T.expense, fontSize: 12, marginTop: 10 }}>{error}</div>}
     </div>
   );

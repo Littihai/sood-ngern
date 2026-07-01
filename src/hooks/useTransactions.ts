@@ -64,6 +64,12 @@ export function useTransactions(
         activeBook.kind === "personal"
           ? collection(db, "users", uid, "transactions")
           : collection(db, "books", activeBook.id, "transactions");
+      if (activeBook.kind === "shared") {
+        const role = activeBook.members[uid]?.role || "viewer";
+        if (role === "viewer") {
+          throw new Error("คุณมีสิทธิ์ดูอย่างเดียวในสมุดนี้");
+        }
+      }
       await addDoc(txCollection, {
         ...tx,
         createdAt: Date.now(),
@@ -82,6 +88,12 @@ export function useTransactions(
         activeBook.kind === "personal"
           ? doc(db, "users", uid, "transactions", id)
           : doc(db, "books", activeBook.id, "transactions", id);
+      if (activeBook.kind === "shared") {
+        const role = activeBook.members[uid]?.role || "viewer";
+        if (role === "viewer") {
+          throw new Error("คุณมีสิทธิ์ดูอย่างเดียวในสมุดนี้");
+        }
+      }
       await deleteDoc(txDoc);
     },
     [uid, activeBook]
