@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { T, catById, fmtMoney, fmtDateShort } from "../theme";
 import { Transaction } from "../types";
@@ -46,9 +46,11 @@ export function TxRow({
   onDelete?: (id: string) => void;
   onClick?: () => void;
 }) {
+  const [showConfirm, setShowConfirm] = useState(false);
   const cat = catById(tx.category);
   const Icon = cat.icon;
   const isIncome = tx.type === "income";
+
   return (
     <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", cursor: onClick ? "pointer" : "default" }}>
       <div
@@ -84,17 +86,104 @@ export function TxRow({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onDelete(tx.id);
+            setShowConfirm(true);
           }}
-          style={{ background: "transparent", border: "none", color: T.inkSoft, padding: 4, marginLeft: 2 }}
-          aria-label="ลบรายการ"
+          style={{ background: "transparent", border: "none", color: T.inkSoft, padding: 4, marginLeft: 2, cursor: "pointer" }}
+          aria-label="ลบรายการ" // เพิ่มตรวจสอบก่อนลบรายการ
         >
           <Trash2 size={14} />
         </button>
       )}
+
+      {/* Custom Confirmation Modal */}
+      {showConfirm && (
+        <div 
+          style={modalOverlayStyle} 
+          onClick={(e) => { 
+            e.stopPropagation();
+            setShowConfirm(false); 
+          }}
+        >
+          <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: T.ink, marginBottom: 6 }}>
+              ยืนยันการลบรายการ
+            </div>
+            <div style={{ fontSize: 12.5, color: T.inkSoft, marginBottom: 20, lineHeight: 1.4 }}>
+              คุณต้องการลบรายการ "{tx.note ? tx.note : cat.label}" ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button
+                onClick={() => setShowConfirm(false)}
+                style={cancelBtnStyle}
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => {
+                  onDelete?.(tx.id); // ใส่ Optional Chaining ลบเออร์เรอร์ TypeScript เรียบร้อย
+                  setShowConfirm(false);
+                }}
+                style={deleteBtnStyle}
+              >
+                ลบรายการ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+/* --- Styles ที่ใช้ร่วมกันในไฟล์ --- */
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100vw",
+  height: "100vh",
+  backgroundColor: "rgba(0, 0, 0, 0.25)",
+  backdropFilter: "blur(4px)",
+  WebkitBackdropFilter: "blur(4px)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999,
+  cursor: "default",
+};
+
+const modalContentStyle: React.CSSProperties = {
+  background: T.paper,
+  border: `1px solid ${T.paperLine}`,
+  borderRadius: 14,
+  padding: "20px 22px",
+  width: "90%",
+  maxWidth: 320,
+  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+};
+
+const cancelBtnStyle: React.CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "none",
+  background: T.paperDim,
+  color: T.inkSoft,
+  fontSize: 12.5,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const deleteBtnStyle: React.CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "none",
+  background: T.expense,
+  color: "#ffffff",
+  fontSize: 12.5,
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
 export const inputStyle: React.CSSProperties = {
   width: "100%",
