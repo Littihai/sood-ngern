@@ -2,9 +2,9 @@ import React from "react";
 import { Wallet, Plus, TrendingUp, TrendingDown } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
-  PieChart, Pie, Cell,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { T, catById, fmtMoney, isoDate, parseISO, addDays, THAI_DOW } from "../theme";
+import { T, catById, fmtMoney, isoDate, parseISO, addDays, THAI_DOW, THAI_MONTHS } from "../theme";
 import { Transaction } from "../types";
 import { Card, TearDivider, TxRow, ghostBtn, primaryBtn } from "./shared";
 
@@ -40,6 +40,25 @@ export function Dashboard({
       expense: dayTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0),
     });
   }
+
+  // last 6 months: income vs expense comparison
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mTx = transactions.filter((t) => {
+      const td = parseISO(t.date);
+      return td.getFullYear() === d.getFullYear() && td.getMonth() === d.getMonth();
+    });
+    const mIncome = mTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+    const mExpense = mTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+    months.push({
+      label: THAI_MONTHS[d.getMonth()],
+      income: mIncome,
+      expense: mExpense,
+      net: mIncome - mExpense,
+    });
+  }
+  const hasMonthlyData = months.some((m) => m.income > 0 || m.expense > 0);
 
   const catTotals: Record<string, number> = {};
   monthTx.filter((t) => t.type === "expense").forEach((t) => {
@@ -84,6 +103,42 @@ export function Dashboard({
           </ResponsiveContainer>
         </div>
       </Card>
+
+      {hasMonthlyData && (
+        <Card title="เปรียบเทียบรายรับ-รายจ่าย 6 เดือนล่าสุด">
+          <div style={{ width: "100%", height: 220 }}>
+            <ResponsiveContainer>
+              <BarChart data={months} barGap={4} barCategoryGap="28%">
+                <CartesianGrid vertical={false} stroke={T.paperLine} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.inkSoft }} axisLine={{ stroke: T.paperLine }} tickLine={false} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v: number, n: string) => [`฿${fmtMoney(v)}`, n === "income" ? "รายรับ" : n === "expense" ? "รายจ่าย" : "สุทธิ"]}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${T.paperLine}`, fontFamily: "IBM Plex Sans Thai" }}
+                />
+                <Legend
+                  formatter={(v) => (v === "income" ? "รายรับ" : v === "expense" ? "รายจ่าย" : v)}
+                  wrapperStyle={{ fontSize: 12, fontFamily: "IBM Plex Sans Thai" }}
+                  iconType="circle"
+                  iconSize={8}
+                />
+                <Bar dataKey="income" name="income" fill={T.income} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="expense" name="expense" fill={T.expense} radius={[4, 4, 0, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, overflowX: "auto" }}>
+            {months.map((m) => (
+              <div key={m.label} style={{ flex: "1 0 auto", minWidth: 78, textAlign: "center", padding: "6px 4px", borderRadius: 8, background: T.paperDim }}>
+                <div style={{ fontSize: 10.5, color: T.inkSoft, fontWeight: 600 }}>{m.label}</div>
+                <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: m.net >= 0 ? T.income : T.expense }}>
+                  {m.net >= 0 ? "+" : "-"}฿{fmtMoney(m.net)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {catData.length > 0 && (
         <Card title="สัดส่วนรายจ่ายเดือนนี้">

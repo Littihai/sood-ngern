@@ -6,6 +6,13 @@ import { Card, MiniStat, TearDivider, iconBtn } from "./shared";
 
 type Mode = "week" | "month";
 
+interface CatRow {
+  id: string;
+  name: string;
+  value: number;
+  color: string;
+}
+
 export function SummaryView({ transactions, onSeeDay }: { transactions: Transaction[]; onSeeDay: (iso: string) => void }) {
   const [mode, setMode] = useState<Mode>("week");
   const [anchor, setAnchor] = useState(new Date());
@@ -28,14 +35,18 @@ export function SummaryView({ transactions, onSeeDay }: { transactions: Transact
   const income = rangeTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expense = rangeTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
 
-  const catTotals: Record<string, number> = {};
-  rangeTx.filter((t) => t.type === "expense").forEach((t) => {
-    catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
-  });
-  const catData = Object.entries(catTotals)
-    .map(([id, val]) => ({ id, name: catById(id).label, value: val, color: catById(id).color }))
-    .sort((a, b) => b.value - a.value);
-  const maxCat = catData.length > 0 ? catData[0].value : 0;
+  const buildCatData = (type: "income" | "expense"): CatRow[] => {
+    const totals: Record<string, number> = {};
+    rangeTx.filter((t) => t.type === type).forEach((t) => {
+      totals[t.category] = (totals[t.category] || 0) + t.amount;
+    });
+    return Object.entries(totals)
+      .map(([id, val]) => ({ id, name: catById(id).label, value: val, color: catById(id).color }))
+      .sort((a, b) => b.value - a.value);
+  };
+
+  const expenseCatData = buildCatData("expense");
+  const incomeCatData = buildCatData("income");
 
   const byDay: Record<string, { income: number; expense: number }> = {};
   rangeTx.forEach((t) => {
@@ -84,31 +95,12 @@ export function SummaryView({ transactions, onSeeDay }: { transactions: Transact
         <MiniStat label="สุทธิ" value={income - expense} color={income - expense >= 0 ? T.ink : T.expense} />
       </div>
 
-      <Card title="แยกตามหมวดหมู่">
-        {catData.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "16px 0", color: T.inkSoft, fontSize: 13 }}>ไม่มีรายจ่ายในช่วงนี้</div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {catData.map((c) => {
-              const Icon = catById(c.id).icon;
-              const pct = expense > 0 ? Math.round((c.value / expense) * 100) : 0;
-              const barPct = maxCat > 0 ? (c.value / maxCat) * 100 : 0;
-              return (
-                <div key={c.id}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 4 }}>
-                    <Icon size={14} color={c.color} />
-                    <span style={{ flex: 1 }}>{c.name}</span>
-                    <span style={{ color: T.inkSoft, fontSize: 11 }}>{pct}%</span>
-                    <span className="mono" style={{ fontWeight: 600, minWidth: 70, textAlign: "right" }}>฿{fmtMoney(c.value)}</span>
-                  </div>
-                  <div style={{ height: 6, background: T.paperDim, borderRadius: 4 }}>
-                    <div style={{ height: "100%", width: `${barPct}%`, background: c.color, borderRadius: 4 }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      <Card title="แยกตามหมวดหมู่รายจ่าย">
+        <CategoryBreakdown data={expenseCatData} total={expense} emptyLabel="ไม่มีรายจ่ายในช่วงนี้" />
+      </Card>
+
+      <Card title="แยกตามหมวดหมู่รายรับ">
+        <CategoryBreakdown data={incomeCatData} total={income} emptyLabel="ไม่มีรายรับในช่วงนี้" />
       </Card>
 
       <Card title="รายวันในช่วงนี้">
@@ -132,6 +124,37 @@ export function SummaryView({ transactions, onSeeDay }: { transactions: Transact
           ))
         )}
       </Card>
+    </div>
+  );
+}
+
+function CategoryBreakdown({ data, total, emptyLabel }: { data: CatRow[]; total: number; emptyLabel: string }) {
+  const maxCat = data.length > 0 ? data[0].value : 0;
+
+  if (data.length === 0) {
+    return <div style={{ textAlign: "center", padding: "16px 0", color: T.inkSoft, fontSize: 13 }}>{emptyLabel}</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {data.map((c) => {
+        const Icon = catById(c.id).icon;
+        const pct = total > 0 ? Math.round((c.value / total) * 100) : 0;
+        const barPct = maxCat > 0 ? (c.value / maxCat) * 100 : 0;
+        return (
+          <div key={c.id}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 4 }}>
+              <Icon size={14} color={c.color} />
+              <span style={{ flex: 1 }}>{c.name}</span>
+              <span style={{ color: T.inkSoft, fontSize: 11 }}>{pct}%</span>
+              <span className="mono" style={{ fontWeight: 600, minWidth: 70, textAlign: "right" }}>฿{fmtMoney(c.value)}</span>
+            </div>
+            <div style={{ height: 6, background: T.paperDim, borderRadius: 4 }}>
+              <div style={{ height: "100%", width: `${barPct}%`, background: c.color, borderRadius: 4 }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
