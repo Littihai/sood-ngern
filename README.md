@@ -1,4 +1,4 @@
-# 💰 สมุดเงิน (sood-ngern)
+# 💰 สมุดเงิน (sood-ngern) สามารถนำไปใช้งานได้
 
 แอปพลิเคชันบันทึกรายรับ-รายจ่ายส่วนตัว (Personal Expense Tracker) พัฒนาด้วย React + TypeScript
 เชื่อมต่อฐานข้อมูลแบบ Realtime ผ่าน Firebase พร้อมระบบล็อกอินด้วย Google และ Deploy อัตโนมัติผ่าน GitHub Actions
