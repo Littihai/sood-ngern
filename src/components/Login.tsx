@@ -11,7 +11,7 @@ const FEATURES = [
 ];
 
 export function Login() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, accountDeleted, dismissAccountDeleted } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -75,6 +75,12 @@ export function Login() {
 
       <main className="sn-login-panel" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative" }}>
         <div className="sn-card sn-page" style={{ width: "100%", maxWidth: 400, padding: "34px 30px", textAlign: "center", boxShadow: "var(--shadow-lg)" }}>
+          {accountDeleted && (
+            <div role="status" style={{ background: T.incomeBg, color: T.income, borderRadius: 14, padding: "12px 14px", fontSize: 14, fontWeight: 600, marginBottom: 20, textAlign: "left" }}>
+              ลบบัญชีและข้อมูลของคุณเรียบร้อยแล้ว
+              <button onClick={dismissAccountDeleted} style={{ display: "block", marginTop: 4, background: "transparent", border: "none", color: "inherit", fontSize: 12.5, fontWeight: 500, padding: 0, textDecoration: "underline" }}>ปิด</button>
+            </div>
+          )}
           <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4 }}>ยินดีต้อนรับ</h2>
           <p style={{ fontSize: 14, color: T.inkSoft, margin: "6px 0 26px" }}>เข้าสู่ระบบเพื่อเริ่มบันทึกรายรับรายจ่าย</p>
           <button

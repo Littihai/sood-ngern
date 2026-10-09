@@ -11,3 +11,5 @@ firebase-debug.log
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+firestore-debug.log
+ui-debug.log
