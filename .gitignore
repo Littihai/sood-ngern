@@ -6,3 +6,8 @@ dist
 firebase-debug.log
 .DS_Store
 *.local
+
+# TypeScript build artifacts
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

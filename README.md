@@ -1,7 +1,7 @@
 # 💰 สมุดเงิน (sood-ngern) สามารถนำไปใช้งานได้
 
 แอปพลิเคชันบันทึกรายรับ-รายจ่ายส่วนตัว (Personal Expense Tracker) พัฒนาด้วย React + TypeScript
-เชื่อมต่อฐานข้อมูลแบบ Realtime ผ่าน Firebase พร้อมระบบล็อกอินด้วย Google และ Deploy อัตโนมัติผ่าน GitHub Actions
+เชื่อมต่อฐานข้อมูลแบบ Realtime ผ่าน Firebase พร้อมระบบล็อกอินด้วย Google และสมุดบัญชีร่วมกันหลายคน (เจ้าของสมุดอนุมัติสมาชิก)
 
 <p align="left">
   <img src="https://img.shields.io/github/stars/Littihai/sood-ngern?style=flat-square" alt="stars" />
@@ -31,11 +31,10 @@
   <img src="https://img.shields.io/badge/Firebase%20Hosting-Deploy-FFA000?style=for-the-badge&logo=firebase&logoColor=white" alt="Firebase Hosting" />
 </p>
 
-**Tooling / CI-CD**
+**Tooling**
 
 <p>
   <img src="https://img.shields.io/badge/ESLint-8.57-4B32C3?style=for-the-badge&logo=eslint&logoColor=white" alt="ESLint" />
-  <img src="https://img.shields.io/badge/GitHub%20Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions" />
   <img src="https://img.shields.io/badge/npm-Package%20Manager-CB3837?style=for-the-badge&logo=npm&logoColor=white" alt="npm" />
 </p>
 
@@ -54,7 +53,7 @@
 - 📅 มุมมองรายวัน (Daily View) และสรุปรายสัปดาห์/รายเดือน (Summary View)
 - ⚡ ข้อมูล Realtime ผ่าน Firestore — อัปเดตทันทีที่มีการเปลี่ยนแปลง
 - 🔒 ข้อมูลแยกตามผู้ใช้ (`users/{uid}/transactions/{txId}`) ปลอดภัยด้วย Firestore Security Rules
-- 🚀 Deploy อัตโนมัติขึ้น Firebase Hosting ทุกครั้งที่ push เข้า branch `main` ผ่าน GitHub Actions
+- 👥 สมุดบัญชีร่วม (Shared book) — สร้างสมุด แชร์ ID ให้คนอื่น เจ้าของสมุดอนุมัติคำขอเข้าร่วมและกำหนดสิทธิ์ Owner / Editor / Viewer
 
 ---
 
@@ -70,7 +69,9 @@ src/
  ├─ contexts/
  │   └─ AuthContext.tsx         # จัดการ state การล็อกอินด้วย Google
  ├─ hooks/
- │   └─ useTransactions.ts      # อ่าน/เพิ่ม/ลบ รายการจาก Firestore (realtime)
+ │   ├─ useTransactions.ts      # อ่าน/เพิ่ม/ลบ รายการจาก Firestore (realtime)
+ │   ├─ useBooks.ts             # สมุดร่วม: สร้าง, ขอเข้าร่วม, อนุมัติ, จัดการสมาชิก
+ │   └─ useAction.ts            # helper สถานะ busy/error ของปุ่ม action
  └─ components/
      ├─ Login.tsx                # หน้าล็อกอิน
      ├─ Layout.tsx                # sidebar, bottom nav, header
@@ -78,6 +79,8 @@ src/
      ├─ AddForm.tsx               # ฟอร์มบันทึกรายการ
      ├─ DailyView.tsx             # มุมมองรายวัน
      ├─ SummaryView.tsx           # สรุปรายสัปดาห์/รายเดือน
+     ├─ BookSwitcher.tsx          # สลับ/สร้าง/ขอเข้าร่วมสมุด
+     ├─ BookMembers.tsx           # สมาชิก, คำขอเข้าร่วม, ตั้งค่าสมุด
      └─ shared.tsx                # Card, TxRow, MiniStat ฯลฯ ที่ใช้ร่วมกัน
 ```
 
@@ -128,7 +131,24 @@ users/{uid}/transactions/{txId}
   createdAt: number (epoch ms)
 ```
 
-ข้อมูลแยกตาม `uid` ของผู้ใช้แต่ละคน — คนอื่นมองไม่เห็นข้อมูลกัน กติกานี้ถูกบังคับด้วย `firestore.rules`
+```
+books/{bookId}                          # สมุดร่วม — อ่านได้เฉพาะสมาชิก (memberIds)
+  name, ownerUid, ownerName, createdAt, updatedAt, deleted?
+  memberIds: string[]                   # ใช้ query ด้วย array-contains
+  members: { [uid]: { name, photoURL, role: "owner"|"editor"|"viewer", joinedAt } }
+books/{bookId}/transactions/{txId}      # โครงสร้างเดียวกับรายการส่วนตัว
+books/{bookId}/joinRequests/{uid}       # คำขอเข้าร่วม (doc id = uid ผู้ขอ)
+  requesterName, requesterPhotoURL, requestedAt, role: "viewer", status: "pending"|"rejected"
+```
+
+**ขั้นตอนเข้าร่วมสมุดร่วม:** เจ้าของกด "คัดลอก ID" ส่งให้เพื่อน → เพื่อนกด Join แล้วใส่ ID →
+เจ้าของเห็นคำขอในหน้า Profile และกด "อนุมัติ" (เลือก Viewer/Editor) หรือ "ปฏิเสธ"
+ไม่มีรหัสผ่านเก็บในฐานข้อมูล และคนที่ไม่ใช่สมาชิกอ่านข้อมูลสมุดไม่ได้เลย
+
+> **อัปเกรดจากเวอร์ชันเก่า (joinPassword):** แอปจะลบฟิลด์ `joinPassword` เดิมออกจากสมุดให้อัตโนมัติ
+> เมื่อเจ้าของสมุดเปิดแอปครั้งแรกหลัง deploy — ให้ deploy `firestore.rules` ก่อนปล่อยโค้ดใหม่
+
+ข้อมูลส่วนตัวแยกตาม `uid` ของผู้ใช้แต่ละคน — คนอื่นมองไม่เห็นข้อมูลกัน กติกานี้ถูกบังคับด้วย `firestore.rules`
 ที่มีมาให้แล้ว (อนุญาตเฉพาะเจ้าของ `uid` เท่านั้น) ให้ deploy rules ก่อนใช้งานจริง:
 
 ```bash
@@ -157,19 +177,15 @@ firebase deploy --only hosting
 จะได้ URL แบบ `https://<your-project-id>.web.app` — อย่าลืมเพิ่มโดเมนนี้ใน
 **Authentication > Settings > Authorized domains** มิฉะนั้น Google login จะ error บน production
 
-### 6. Auto-deploy ด้วย GitHub Actions (CI/CD)
+### 6. Deploy ทั้งระบบ (hosting + rules)
 
-Workflow อยู่ที่ `.github/workflows/deploy.yml` — จะ build + deploy ให้อัตโนมัติทุกครั้งที่ push เข้า `main`
+```bash
+npm run build
+firebase deploy --only firestore:rules,hosting
+```
 
-ต้องตั้งค่า **GitHub Secrets** ก่อน (Settings > Secrets and variables > Actions > New repository secret):
-
-| Secret name | ค่า |
-|---|---|
-| `VITE_FIREBASE_API_KEY` ฯลฯ (6 ตัว) | ค่าเดียวกับใน `.env.local` |
-| `FIREBASE_SERVICE_ACCOUNT` | JSON key จาก Firebase Console > Project settings > Service accounts > Generate new private key |
-
-แล้วแก้ `projectId: your-firebase-project-id` ใน `deploy.yml` ให้เป็น project id จริง
-หลังจากนั้น push โค้ดเข้า `main` ทีไร GitHub Actions จะ build แล้ว deploy ให้อัตโนมัติ
+> ยังไม่มี workflow CI/CD ใน repo นี้ (ถูกลบไปแล้ว) หากต้องการ auto-deploy
+> ให้เพิ่ม `.github/workflows/deploy.yml` โดยใช้ `FirebaseExtended/action-hosting-deploy`
 
 ---
 
@@ -187,6 +203,7 @@ Workflow อยู่ที่ `.github/workflows/deploy.yml` — จะ build +
 ## 🔒 ความปลอดภัย
 
 - ข้อมูลผู้ใช้แต่ละคนถูกแยกด้วย `uid` และบังคับใช้ผ่าน `firestore.rules`
+- สมุดร่วมอ่านได้เฉพาะสมาชิก; การเข้าร่วมต้องผ่านการอนุมัติของเจ้าของสมุด (ไม่มีรหัสผ่านเก็บใน DB)
 - ดูรายละเอียดการวิเคราะห์ rules เพิ่มเติมได้ที่ [`.firestore-rules-analysis.md`](./.firestore-rules-analysis.md)
 - ห้าม commit ไฟล์ `.env.local` หรือ Firebase service account key เข้า repository
 

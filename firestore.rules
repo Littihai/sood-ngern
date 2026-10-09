@@ -4,7 +4,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ===============================================================
-    // Assumed Data Model
+    // Data Model
     // ===============================================================
     //
     // users/{userId}/transactions/{txId}
@@ -14,22 +14,28 @@ service cloud.firestore {
     //   note: string, <= 500 chars
     //   date: string, YYYY-MM-DD
     //   createdAt: number, epoch ms
-    //   createdByUid: string, immutable creator uid
-    //   createdByName: string, 1..100 chars
-    //   createdByPhotoURL: string, empty or http(s) URL
+    //   createdByUid / createdByName / createdByPhotoURL
     //
     // books/{bookId}
     //   name: string, 1..80 chars
     //   ownerUid: string, immutable owner uid
     //   ownerName: string, 1..100 chars
-    //   joinPassword: string, 4..80 chars
-    //   memberIds: list<string>, max 50
+    //   memberIds: list<string>, max 50 (always == keys of `members`)
     //   members: map<uid, BookMember>, max 50
-    //   createdAt: number, epoch ms
+    //   createdAt: number, epoch ms (immutable)
     //   updatedAt: number, epoch ms
+    //   deleted: bool, optional (soft delete by the owner)
+    //
+    //   Only MEMBERS can read a book. There is no join password: a person who
+    //   knows the book id sends a join request and the OWNER approves it.
     //
     // books/{bookId}/transactions/{txId}
-    //   same fields as transaction above, readable/writable by book members.
+    //   same fields as a personal transaction; members read, owner/editor write.
+    //
+    // books/{bookId}/joinRequests/{requesterUid}
+    //   requesterUid, requesterName, requesterPhotoURL, requestedAt,
+    //   role ("viewer"), status ("pending" | "rejected")
+    //   Approving = the owner adds the member to the book and deletes the request.
     //
     // ===============================================================
 
@@ -104,36 +110,44 @@ service cloud.firestore {
         member.joinedAt < 4102444800000;
     }
 
-    function bookMemberRole(bookId) {
-      return get(/databases/$(database)/documents/books/$(bookId)).data.members[request.auth.uid].role;
+    function bookPath(bookId) {
+      return /databases/$(database)/documents/books/$(bookId);
+    }
+
+    function bookData(bookId) {
+      return get(bookPath(bookId)).data;
     }
 
     function isBookOwner(bookId) {
       return isAuthenticated() &&
-        exists(/databases/$(database)/documents/books/$(bookId)) &&
-        get(/databases/$(database)/documents/books/$(bookId)).data.ownerUid == request.auth.uid;
+        exists(bookPath(bookId)) &&
+        bookData(bookId).ownerUid == request.auth.uid;
+    }
+
+    function isBookMemberById(bookId) {
+      return isAuthenticated() &&
+        exists(bookPath(bookId)) &&
+        request.auth.uid in bookData(bookId).memberIds;
     }
 
     function canWriteBook(bookId) {
-      return isAuthenticated() &&
-        exists(/databases/$(database)/documents/books/$(bookId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/books/$(bookId)).data.memberIds &&
-        (bookMemberRole(bookId) == "owner" || bookMemberRole(bookId) == "editor");
+      return isBookMemberById(bookId) &&
+        bookData(bookId).get("deleted", false) == false &&
+        bookData(bookId).members[request.auth.uid].role in ["owner", "editor"];
     }
 
     function isValidCreatedBook(data) {
       return data.keys().hasOnly([
-        "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
-        "members", "createdAt", "updatedAt"
+        "name", "ownerUid", "ownerName", "memberIds", "members",
+        "createdAt", "updatedAt"
       ]) &&
       data.keys().hasAll([
-        "name", "ownerUid", "ownerName", "joinPassword", "memberIds",
-        "members", "createdAt", "updatedAt"
+        "name", "ownerUid", "ownerName", "memberIds", "members",
+        "createdAt", "updatedAt"
       ]) &&
       validString(data, "name", 1, 80) &&
       data.ownerUid == request.auth.uid &&
       validString(data, "ownerName", 1, 100) &&
-      validString(data, "joinPassword", 4, 80) &&
       data.memberIds is list &&
       data.memberIds.size() == 1 &&
       data.memberIds[0] == request.auth.uid &&
@@ -144,34 +158,40 @@ service cloud.firestore {
       validEpochMs(data, "updatedAt");
     }
 
-    function isBookMember(data) {
+    // The owner may rename the book, soft-delete it and manage members.
+    // `joinPassword` (legacy field from the old password flow) may only be
+    // REMOVED, never written — it is not in the allowed key list.
+    function isValidOwnerUpdate() {
       return isAuthenticated() &&
-        data.memberIds is list &&
-        request.auth.uid in data.memberIds;
-    }
-
-    function isBookMemberById(bookId) {
-      return isAuthenticated() &&
-        exists(/databases/$(database)/documents/books/$(bookId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/books/$(bookId)).data.memberIds;
-    }
-
-    // Covers a user who is NOT a member yet, joining with the correct password.
-    // Only "members", "memberIds", "updatedAt" may change, the new member entry
-    // must be a valid "viewer", and the caller must add exactly themself.
-    function isValidBookJoin() {
-      return isAuthenticated() &&
-        !(request.auth.uid in resource.data.memberIds) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          "members", "memberIds", "updatedAt"
+        resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.keys().hasOnly([
+          "name", "ownerUid", "ownerName", "memberIds", "members",
+          "createdAt", "updatedAt", "deleted"
         ]) &&
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        validString(request.resource.data, "name", 1, 80) &&
+        validString(request.resource.data, "ownerName", 1, 100) &&
         request.resource.data.memberIds is list &&
-        request.auth.uid in request.resource.data.memberIds &&
-        request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+        request.resource.data.memberIds.size() <= 50 &&
         request.resource.data.members is map &&
-        request.auth.uid in request.resource.data.members.keys() &&
+        request.resource.data.members.size() <= 50 &&
+        request.resource.data.memberIds.toSet() == request.resource.data.members.keys().toSet() &&
+        request.auth.uid in request.resource.data.memberIds &&
+        request.resource.data.members[request.auth.uid].role == "owner";
+    }
+
+    // A non-owner member may remove ONLY themself from the book.
+    function isValidMemberLeave() {
+      return isAuthenticated() &&
+        request.auth.uid in resource.data.memberIds &&
+        resource.data.ownerUid != request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          "memberIds", "members", "updatedAt"
+        ]) &&
+        !(request.auth.uid in request.resource.data.memberIds) &&
+        request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1 &&
         request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([request.auth.uid]) &&
-        isValidMember(request.resource.data.members[request.auth.uid], "viewer") &&
         validEpochMs(request.resource.data, "updatedAt");
     }
 
@@ -182,51 +202,14 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
-    match /joinRequests/{requestId} {
-      allow read: if isAuthenticated() && (
-        resource.data.requesterUid == request.auth.uid ||
-        (exists(/databases/$(database)/documents/books/$(resource.data.bookId)) && get(/databases/$(database)/documents/books/$(resource.data.bookId)).data.ownerUid == request.auth.uid)
-      );
-      allow create: if isAuthenticated() &&
-        request.resource.data.keys().hasOnly(["bookId", "bookName", "requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
-        request.resource.data.keys().hasAll(["bookId", "bookName", "requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
-        request.resource.data.requesterUid == request.auth.uid &&
-        request.resource.data.bookId is string &&
-        request.resource.data.bookId.size() > 0 &&
-        request.resource.data.bookName is string &&
-        request.resource.data.requesterName is string &&
-        request.resource.data.requesterPhotoURL is string &&
-        request.resource.data.requestedAt is number &&
-        request.resource.data.requestedAt > 0 &&
-        request.resource.data.role in ["editor", "viewer"] &&
-        request.resource.data.status == "pending" &&
-        request.resource.data.joinPassword is string &&
-        request.resource.data.joinPassword.size() >= 4 &&
-        request.resource.data.joinPassword.size() <= 80 &&
-        exists(/databases/$(database)/documents/books/$(request.resource.data.bookId)) &&
-        get(/databases/$(database)/documents/books/$(request.resource.data.bookId)).data.joinPassword == request.resource.data.joinPassword;
-      allow update: if isAuthenticated() &&
-        (exists(/databases/$(database)/documents/books/$(resource.data.bookId)) && get(/databases/$(database)/documents/books/$(resource.data.bookId)).data.ownerUid == request.auth.uid);
-      allow delete: if false;
-    }
-
     match /books/{bookId} {
       allow create: if isAuthenticated() && isValidCreatedBook(request.resource.data);
 
-      allow read: if isAuthenticated() && (
-        isBookMember(resource.data) || resource.data.keys().hasAll(["ownerUid", "joinPassword", "memberIds"])
-      );
+      // get + list: members only. Clients must query with
+      // where("memberIds", "array-contains", uid).
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.memberIds;
 
-      allow list: if isAuthenticated();
-
-      // FIX: previously required `isBookMember(resource.data)` for every update,
-      // including the join case — but someone joining is, by definition, not yet
-      // a member, so that AND made joining impossible for everyone. Now it's:
-      // owner-writes OR a valid join (isValidBookJoin already enforces that the
-      // caller isn't already a member and only touches members/memberIds/updatedAt).
-      allow update: if
-        (isBookMember(resource.data) && isBookOwner(bookId)) ||
-        isValidBookJoin();
+      allow update: if isValidOwnerUpdate() || isValidMemberLeave();
 
       allow delete: if false;
 
@@ -237,34 +220,42 @@ service cloud.firestore {
         allow delete: if canWriteBook(bookId);
       }
 
-      match /joinRequests/{requestId} {
-        function canCreateJoinRequest() {
-          return isAuthenticated() &&
-            exists(/databases/$(database)/documents/books/$(bookId)) &&
-            !(request.auth.uid in get(/databases/$(database)/documents/books/$(bookId)).data.memberIds) &&
-            request.resource.data.keys().hasOnly(["requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
-            request.resource.data.keys().hasAll(["requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status", "joinPassword"]) &&
-            request.resource.data.requesterUid == request.auth.uid &&
-            request.resource.data.requesterName is string &&
-            request.resource.data.requesterName.size() >= 1 &&
-            request.resource.data.requesterName.size() <= 100 &&
-            request.resource.data.requesterPhotoURL is string &&
-            request.resource.data.requesterPhotoURL.size() <= 500 &&
-            (request.resource.data.requesterPhotoURL == "" || request.resource.data.requesterPhotoURL.matches("^https?://.*")) &&
-            request.resource.data.requestedAt is number &&
-            request.resource.data.requestedAt > 0 &&
-            request.resource.data.requestedAt < 4102444800000 &&
-            request.resource.data.role in ["editor", "viewer"] &&
-            request.resource.data.status == "pending" &&
-            request.resource.data.joinPassword is string &&
-            request.resource.data.joinPassword.size() >= 4 &&
-            request.resource.data.joinPassword.size() <= 80 &&
-            request.resource.data.joinPassword == get(/databases/$(database)/documents/books/$(bookId)).data.joinPassword;
+      // Doc id == requester uid, so each person has at most one request per book.
+      match /joinRequests/{requesterUid} {
+        function isValidJoinRequest(data) {
+          return data.keys().hasOnly([
+            "requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status"
+          ]) &&
+          data.keys().hasAll([
+            "requesterUid", "requesterName", "requesterPhotoURL", "requestedAt", "role", "status"
+          ]) &&
+          data.requesterUid == request.auth.uid &&
+          validString(data, "requesterName", 1, 100) &&
+          validOptionalUrl(data, "requesterPhotoURL") &&
+          validEpochMs(data, "requestedAt") &&
+          data.role == "viewer" &&
+          data.status == "pending";
         }
 
-        allow read: if isBookOwner(bookId) || (isAuthenticated() && resource.data.requesterUid == request.auth.uid);
-        allow create: if canCreateJoinRequest();
-        allow update: if isBookOwner(bookId);
+        // Path-based on purpose: lets a requester read their own request
+        // before it exists (needed for onSnapshot on a not-yet-created doc).
+        allow read: if isAuthenticated() &&
+          (request.auth.uid == requesterUid || isBookOwner(bookId));
+
+        allow create: if isAuthenticated() &&
+          request.auth.uid == requesterUid &&
+          exists(bookPath(bookId)) &&
+          !(request.auth.uid in bookData(bookId).memberIds) &&
+          isValidJoinRequest(request.resource.data);
+
+        // Owner can only flip the status to "rejected".
+        allow update: if isBookOwner(bookId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status"]) &&
+          request.resource.data.status == "rejected";
+
+        // Requester withdraws / dismisses; owner clears after approve/reject.
+        allow delete: if isAuthenticated() &&
+          (request.auth.uid == requesterUid || isBookOwner(bookId));
       }
     }
   }

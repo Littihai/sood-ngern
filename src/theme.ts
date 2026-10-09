@@ -4,21 +4,29 @@ import {
 } from "lucide-react";
 import { TransactionType } from "./types";
 
+/**
+ * Design tokens as CSS variables (defined in styles.css) so every inline style
+ * follows the light/dark theme. The legacy names (paper/ink/gold) are kept as aliases.
+ */
 export const T = {
-  paper: "#FBF8F2",
-  paperDim: "#F2ECDD",
-  paperLine: "#E1D9C4",
-  ink: "#24211C",
-  inkSoft: "#6B6558",
-  income: "#2F6D46",
-  incomeBg: "#E3EDE1",
-  expense: "#B23A2A",
-  expenseBg: "#F6E3DC",
-  gold: "#AD7F26",
-  goldBg: "#F3E9D2",
+  bg: "var(--bg)",
+  paper: "var(--surface)",
+  paperDim: "var(--surface-2)",
+  paperLine: "var(--border)",
+  ink: "var(--text)",
+  inkSoft: "var(--muted)",
+  primary: "var(--primary)",
+  primarySoft: "var(--primary-soft)",
+  onPrimary: "var(--on-primary)",
+  income: "var(--income)",
+  incomeBg: "var(--income-bg)",
+  expense: "var(--expense)",
+  expenseBg: "var(--expense-bg)",
+  gold: "var(--amber)",
+  goldBg: "var(--amber-bg)",
+  hero: "var(--hero)",
+  shadow: "var(--shadow)",
 };
-
-export const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');`;
 
 export interface Category {
   id: string;
@@ -28,22 +36,22 @@ export interface Category {
 }
 
 export const EXPENSE_CATS: Category[] = [
-  { id: "food", label: "อาหาร", icon: Utensils, color: "#B23A2A" },
-  { id: "transport", label: "เดินทาง", icon: Car, color: "#8A5A2E" },
-  { id: "shopping", label: "ช้อปปิ้ง", icon: ShoppingBag, color: "#A6467A" },
-  { id: "bills", label: "บิล/ประจำ", icon: Receipt, color: "#4A5C8A" },
-  { id: "fun", label: "บันเทิง", icon: Film, color: "#7B4FA0" },
-  { id: "health", label: "ของขาย", icon: HeartPulse, color: "#C2504F" },
-  { id: "edu", label: "การศึกษา", icon: GraduationCap, color: "#2E7D6B" },
-  { id: "other_e", label: "อื่นๆ", icon: MoreHorizontal, color: "#8A8577" },
+  { id: "food", label: "อาหาร", icon: Utensils, color: "#F97316" },
+  { id: "transport", label: "เดินทาง", icon: Car, color: "#3B82F6" },
+  { id: "shopping", label: "ช้อปปิ้ง", icon: ShoppingBag, color: "#EC4899" },
+  { id: "bills", label: "บิล/ประจำ", icon: Receipt, color: "#6366F1" },
+  { id: "fun", label: "บันเทิง", icon: Film, color: "#A855F7" },
+  { id: "health", label: "สุขภาพ", icon: HeartPulse, color: "#EF4444" },
+  { id: "edu", label: "การศึกษา", icon: GraduationCap, color: "#14B8A6" },
+  { id: "other_e", label: "อื่นๆ", icon: MoreHorizontal, color: "#64748B" },
 ];
 
 export const INCOME_CATS: Category[] = [
-  { id: "salary", label: "เงินเดือน", icon: Briefcase, color: "#2F6D46" },
-  { id: "bonus", label: "โบนัส", icon: Gift, color: "#3C8A5C" },
-  { id: "biz", label: "ธุรกิจ", icon: Building2, color: "#5A9A6E" },
-  { id: "gift", label: "ของขวัญ", icon: Sparkles, color: "#7AA85C" },
-  { id: "other_i", label: "อื่นๆ", icon: MoreHorizontal, color: "#8A8577" },
+  { id: "salary", label: "เงินเดือน", icon: Briefcase, color: "#10B981" },
+  { id: "bonus", label: "โบนัส", icon: Gift, color: "#22C55E" },
+  { id: "biz", label: "ธุรกิจ", icon: Building2, color: "#06B6D4" },
+  { id: "gift", label: "ของขวัญ", icon: Sparkles, color: "#84CC16" },
+  { id: "other_i", label: "อื่นๆ", icon: MoreHorizontal, color: "#64748B" },
 ];
 
 export const ALL_CATS: Category[] = [...EXPENSE_CATS, ...INCOME_CATS];

@@ -1,8 +1,8 @@
 import React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ReceiptText } from "lucide-react";
 import { T, fmtDateLong, todayISO, addDays, parseISO, isoDate } from "../theme";
 import { Transaction } from "../types";
-import { Card, MiniStat, TearDivider, TxRow, ghostBtn, iconBtn } from "./shared";
+import { Card, Divider, MiniStat, TxRow, ghostBtn, iconBtn } from "./shared";
 
 export function DailyView({
   transactions,
@@ -26,24 +26,24 @@ export function DailyView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: `1px solid ${T.paperLine}`, borderRadius: 12, padding: "10px 12px" }}>
-        <button onClick={() => shift(-1)} style={iconBtn}>
+      <div className="sn-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px" }}>
+        <button onClick={() => shift(-1)} style={iconBtn} aria-label="วันก่อนหน้า">
           <ChevronLeft size={18} />
         </button>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>{fmtDateLong(selectedDate)}</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{fmtDateLong(selectedDate)}</div>
           {selectedDate !== todayISO() && (
-            <button onClick={() => setSelectedDate(todayISO())} style={{ ...ghostBtn, marginTop: 2, fontSize: 11 }}>
+            <button onClick={() => setSelectedDate(todayISO())} style={{ ...ghostBtn, fontSize: 12.5 }}>
               กลับไปวันนี้
             </button>
           )}
         </div>
-        <button onClick={() => shift(1)} style={iconBtn}>
+        <button onClick={() => shift(1)} style={iconBtn} aria-label="วันถัดไป">
           <ChevronRight size={18} />
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
         <MiniStat label="รายรับ" value={income} color={T.income} />
         <MiniStat label="รายจ่าย" value={expense} color={T.expense} />
         <MiniStat label="สุทธิ" value={income - expense} color={income - expense >= 0 ? T.ink : T.expense} />
@@ -51,11 +51,14 @@ export function DailyView({
 
       <Card title={`รายการ (${dayTx.length})`}>
         {dayTx.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "24px 0", color: T.inkSoft, fontSize: 13 }}>ไม่มีรายการในวันนี้</div>
+          <div style={{ textAlign: "center", padding: "30px 0 22px", color: T.inkSoft, fontSize: 14 }}>
+            <ReceiptText size={34} strokeWidth={1.5} style={{ marginBottom: 8, opacity: 0.6 }} />
+            <div>ไม่มีรายการในวันนี้</div>
+          </div>
         ) : (
           dayTx.map((t, i) => (
             <React.Fragment key={t.id}>
-              {i > 0 && <TearDivider />}
+              {i > 0 && <Divider />}
               <TxRow tx={t} onDelete={onDelete} />
             </React.Fragment>
           ))

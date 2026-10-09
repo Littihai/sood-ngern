@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { LogOut } from "lucide-react";
-import { FONT_IMPORT, T, todayISO } from "./theme";
+import { T, todayISO } from "./theme";
 import { Tab } from "./types";
 import { useAuth } from "./contexts/AuthContext";
 import { useBooks } from "./hooks/useBooks";
@@ -14,49 +14,15 @@ import { SummaryView } from "./components/SummaryView";
 import { ProfileView } from "./components/ProfileView";
 import { BookSwitcher } from "./components/BookSwitcher";
 
-function GlobalStyle() {
-  return (
-    <style>{`
-      ${FONT_IMPORT}
-      * { box-sizing: border-box; }
-      .mono { font-family: 'IBM Plex Mono', monospace; }
-      .sn-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-      .sn-scroll::-webkit-scrollbar-thumb { background: ${T.paperLine}; border-radius: 4px; }
-      button { font-family: inherit; cursor: pointer; }
-      input, select { font-family: inherit; }
-      .ledger-lines {
-        background-image: repeating-linear-gradient(to bottom, transparent, transparent 27px, ${T.paperLine} 28px);
-      }
-      .sn-mobile-signout { display: none; }
-      @media (max-width: 767px) {
-        .sn-sidebar { display: none !important; }
-        .sn-bottomnav { display: flex !important; }
-        .sn-main { padding-bottom: 84px !important; margin-left: 0 !important; }
-        .sn-mobile-signout { display: flex !important; }
-      }
-    `}</style>
-  );
-}
-
 export default function App() {
   const { user, loading: authLoading, signOut } = useAuth();
 
   if (authLoading) {
-    return (
-      <div style={{ fontFamily: "'IBM Plex Sans Thai', system-ui, sans-serif", background: T.paper, minHeight: "100vh" }}>
-        <GlobalStyle />
-        <LoadingState label="กำลังตรวจสอบการเข้าสู่ระบบ..." />
-      </div>
-    );
+    return <LoadingState label="กำลังตรวจสอบการเข้าสู่ระบบ..." />;
   }
 
   if (!user) {
-    return (
-      <div style={{ fontFamily: "'IBM Plex Sans Thai', system-ui, sans-serif", background: T.paper, color: T.ink, minHeight: "100vh" }}>
-        <GlobalStyle />
-        <Login />
-      </div>
-    );
+    return <Login />;
   }
 
   return <SignedInApp uid={user.uid} onSignOut={signOut} userDisplayObj={user} />;
@@ -64,7 +30,7 @@ export default function App() {
 
 function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOut: () => void; userDisplayObj: NonNullable<ReturnType<typeof useAuth>["user"]> }) {
   const { updateUserProfile } = useAuth();
-  const { books, activeBook, loaded: booksLoaded, selectBook, createSharedBook, joinSharedBook, approveJoinRequest, rejectJoinRequest, changeMemberRole, removeMember, leaveBook, updateBookName, updateBookPassword, deleteBook, getRememberedBookPassword } = useBooks(uid, userDisplayObj);
+  const { books, activeBook, loaded: booksLoaded, selectBook, createSharedBook, requestJoin, cancelRequest, myRequests, changeMemberRole, removeMember, leaveBook, updateBookName, deleteBook } = useBooks(uid, userDisplayObj);
   const { transactions, loaded, addTransaction, deleteTransaction } = useTransactions(uid, activeBook, userDisplayObj);
   const canWriteTransactions = activeBook?.kind === "personal" || (activeBook?.kind === "shared" && (activeBook.members[uid]?.role === "owner" || activeBook.members[uid]?.role === "editor"));
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -83,63 +49,58 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
   };
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Sans Thai', system-ui, sans-serif", background: T.paper, color: T.ink, minHeight: "100vh", display: "flex" }}>
-      <GlobalStyle />
-
+    <div style={{ minHeight: "100vh", display: "flex" }}>
       <Sidebar tab={tab} setTab={setTab} user={userDisplayObj} onSignOut={onSignOut} />
 
-      <main className="sn-main sn-scroll" style={{ flex: 1, marginLeft: 232, minHeight: "100vh", overflowY: "auto" }}>
-        <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 20px 40px" }}>
-          <TopHeader tab={tab} />
-          {!booksLoaded || !loaded ? (
-            <LoadingState />
-          ) : tab === "dashboard" ? (
-            <Dashboard transactions={transactions} onSeeAll={() => setTab("summary")} onSeeDay={goToDaily} onAdd={() => setTab("add")} />
-          ) : tab === "add" ? (
-            canWriteTransactions ? (
-              <AddForm onSubmit={handleAdd} savedFlash={savedFlash} />
-            ) : (
-              <div style={{ border: `1px solid ${T.paperLine}`, borderRadius: 12, padding: 18, background: T.paper }}>
-                <div style={{ fontWeight: 700, marginBottom: 6 }}>คุณมีสิทธิ์ดูอย่างเดียวในสมุดนี้</div>
-                <div style={{ color: T.inkSoft, fontSize: 14 }}>เฉพาะ Owner หรือ Editor เท่านั้นที่สามารถบันทึกรายการใหม่ได้</div>
+      <main className="sn-main sn-scroll" style={{ flex: 1, minWidth: 0, minHeight: "100vh" }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 20px 48px" }}>
+          <TopHeader tab={tab} bookName={activeBook?.name} onBookClick={() => setTab("profile")} />
+          <div key={`${tab}:${activeBook?.id}`} className="sn-page">
+            {!booksLoaded || !loaded ? (
+              <LoadingState />
+            ) : tab === "dashboard" ? (
+              <Dashboard transactions={transactions} onSeeAll={() => setTab("summary")} onSeeDay={goToDaily} onAdd={() => setTab("add")} />
+            ) : tab === "add" ? (
+              canWriteTransactions ? (
+                <AddForm onSubmit={handleAdd} savedFlash={savedFlash} />
+              ) : (
+                <div className="sn-card" style={{ padding: 20, maxWidth: 640 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>คุณมีสิทธิ์ดูอย่างเดียวในสมุดนี้</div>
+                  <div style={{ color: T.inkSoft, fontSize: 14 }}>เฉพาะ Owner หรือ Editor เท่านั้นที่สามารถบันทึกรายการใหม่ได้</div>
+                </div>
+              )
+            ) : tab === "daily" ? (
+              <DailyView transactions={transactions} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onDelete={deleteTransaction} />
+            ) : tab === "profile" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
+                <BookSwitcher
+                  books={books}
+                  activeBook={activeBook}
+                  currentUid={uid}
+                  myRequests={myRequests}
+                  onSelect={selectBook}
+                  onCreate={createSharedBook}
+                  onRequestJoin={requestJoin}
+                  onCancelRequest={cancelRequest}
+                  onChangeMemberRole={changeMemberRole}
+                  onRemoveMember={removeMember}
+                  onLeaveBook={leaveBook}
+                  onUpdateBookName={updateBookName}
+                  onDeleteBook={deleteBook}
+                />
+                <ProfileView user={userDisplayObj} onSave={updateUserProfile} />
+                <button
+                  onClick={onSignOut}
+                  className="sn-mobile-only"
+                  style={{ alignItems: "center", gap: 8, background: T.paper, border: `1px solid ${T.paperLine}`, borderRadius: 14, padding: "13px 14px", fontSize: 14.5, color: T.expense, fontWeight: 700, justifyContent: "center" }}
+                >
+                  <LogOut size={17} /> ออกจากระบบ
+                </button>
               </div>
-            )
-          ) : tab === "daily" ? (
-            <DailyView transactions={transactions} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onDelete={deleteTransaction} />
-          ) : tab === "profile" ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <ProfileView user={userDisplayObj} onSave={updateUserProfile} />
-              <button
-                onClick={onSignOut}
-                className="sn-mobile-signout"
-                style={{
-                  alignItems: "center", gap: 8, background: T.paper, border: `1px solid ${T.paperLine}`,
-                  borderRadius: 12, padding: "12px 14px", fontSize: 14, color: T.expense, fontWeight: 600, justifyContent: "center",
-                }}
-              >
-                <LogOut size={16} /> ออกจากระบบ
-              </button>
-              <BookSwitcher
-                books={books}
-                activeBook={activeBook}
-                currentUid={uid}
-                onSelect={selectBook}
-                onCreate={createSharedBook}
-                onJoin={joinSharedBook}
-                onApproveRequest={approveJoinRequest}
-                onRejectRequest={rejectJoinRequest}
-                onChangeMemberRole={changeMemberRole}
-                onRemoveMember={removeMember}
-                onLeaveBook={leaveBook}
-                onUpdateBookName={updateBookName}
-                onUpdateBookPassword={updateBookPassword}
-                onDeleteBook={deleteBook}
-                getRememberedPassword={getRememberedBookPassword}
-              />
-            </div>
-          ) : (
-            <SummaryView transactions={transactions} onSeeDay={goToDaily} />
-          )}
+            ) : (
+              <SummaryView transactions={transactions} onSeeDay={goToDaily} />
+            )}
+          </div>
         </div>
       </main>
 

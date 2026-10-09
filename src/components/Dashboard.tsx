@@ -1,12 +1,22 @@
 import React from "react";
-import { Wallet, Plus, TrendingUp, TrendingDown } from "lucide-react";
+import { Wallet, Plus, ArrowDownLeft, ArrowUpRight, PiggyBank } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { T, catById, fmtMoney, isoDate, parseISO, addDays, THAI_DOW, THAI_MONTHS } from "../theme";
+import { T, catById, fmtMoney, isoDate, parseISO, addDays, THAI_DOW, THAI_MONTHS, THAI_MONTHS_FULL } from "../theme";
 import { Transaction } from "../types";
-import { Card, TearDivider, TxRow, ghostBtn, primaryBtn } from "./shared";
+import { Card, CategoryIcon, Divider, TxRow, ghostBtn, primaryBtn } from "./shared";
+
+const tooltipStyle = {
+  fontSize: 12.5,
+  borderRadius: 12,
+  border: `1px solid ${T.paperLine}`,
+  background: T.paper,
+  color: T.ink,
+  boxShadow: "var(--shadow-lg)",
+};
+const axisTick = { fontSize: 12, fill: T.inkSoft };
 
 export function Dashboard({
   transactions,
@@ -27,6 +37,7 @@ export function Dashboard({
   const income = monthTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const expense = monthTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const balanceAll = transactions.reduce((s, t) => s + (t.type === "income" ? t.amount : -t.amount), 0);
+  const savingsRate = income > 0 ? Math.round(((income - expense) / income) * 100) : null;
 
   const days = [];
   for (let i = 6; i >= 0; i--) {
@@ -73,65 +84,108 @@ export function Dashboard({
   if (transactions.length === 0) return <EmptyState onAdd={onAdd} />;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <div className="ledger-lines" style={{ border: `1px solid ${T.paperLine}`, borderRadius: 14, padding: "22px 22px 18px", background: T.paper }}>
-        <div style={{ fontSize: 11, letterSpacing: 1.2, color: T.inkSoft, fontWeight: 600, textTransform: "uppercase" }}>ยอดคงเหลือทั้งหมด</div>
-        <div className="mono" style={{ fontSize: 38, fontWeight: 600, marginTop: 4, color: balanceAll < 0 ? T.expense : T.ink }}>
-          ฿{fmtMoney(balanceAll)}
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <section
+        aria-label="ยอดคงเหลือ"
+        style={{ background: T.hero, color: "#fff", borderRadius: 24, padding: "26px 26px 22px", position: "relative", overflow: "hidden", boxShadow: "var(--shadow-lg)" }}
+      >
+        <div aria-hidden="true" style={{ position: "absolute", width: 260, height: 260, borderRadius: "50%", background: "rgba(255,255,255,0.08)", top: -110, right: -70 }} />
+        <div aria-hidden="true" style={{ position: "absolute", width: 160, height: 160, borderRadius: "50%", background: "rgba(255,255,255,0.06)", bottom: -70, right: 120 }} />
+        <div style={{ position: "relative" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, opacity: 0.85 }}>ยอดคงเหลือทั้งหมด</div>
+          <div className="mono" style={{ fontSize: "clamp(34px, 7vw, 46px)", fontWeight: 800, letterSpacing: -1, marginTop: 2, lineHeight: 1.15 }}>
+            {balanceAll < 0 ? "-" : ""}฿{fmtMoney(balanceAll)}
+          </div>
+          <div style={{ fontSize: 12.5, opacity: 0.75, marginTop: 4 }}>
+            ประจำ{THAI_MONTHS_FULL[now.getMonth()]} {now.getFullYear() + 543}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginTop: 18 }}>
+            <HeroStat icon={ArrowDownLeft} label="รายรับเดือนนี้" value={`฿${fmtMoney(income)}`} />
+            <HeroStat icon={ArrowUpRight} label="รายจ่ายเดือนนี้" value={`฿${fmtMoney(expense)}`} />
+            {savingsRate !== null && (
+              <HeroStat icon={PiggyBank} label="เก็บออมได้" value={`${savingsRate}%`} sub={savingsRate < 0 ? "ใช้เกินรายรับ" : "ของรายรับ"} />
+            )}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 22, marginTop: 14, flexWrap: "wrap" }}>
-          <StatChip icon={TrendingUp} color={T.income} bg={T.incomeBg} label="รายรับเดือนนี้" value={income} />
-          <StatChip icon={TrendingDown} color={T.expense} bg={T.expenseBg} label="รายจ่ายเดือนนี้" value={expense} />
-        </div>
-      </div>
+      </section>
 
-      <Card title="แนวโน้ม 7 วันล่าสุด">
-        <div style={{ width: "100%", height: 180 }}>
-          <ResponsiveContainer>
-            <BarChart data={days} barGap={2}>
-              <CartesianGrid vertical={false} stroke={T.paperLine} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.inkSoft }} axisLine={{ stroke: T.paperLine }} tickLine={false} />
-              <YAxis hide />
-              <Tooltip
-                formatter={(v: number, n: string) => [`฿${fmtMoney(v)}`, n === "income" ? "รายรับ" : "รายจ่าย"]}
-                labelFormatter={() => ""}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${T.paperLine}`, fontFamily: "IBM Plex Sans Thai" }}
-              />
-              <Bar dataKey="income" fill={T.income} radius={[3, 3, 0, 0]} maxBarSize={14} />
-              <Bar dataKey="expense" fill={T.expense} radius={[3, 3, 0, 0]} maxBarSize={14} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      {hasMonthlyData && (
-        <Card title="เปรียบเทียบรายรับ-รายจ่าย 6 เดือนล่าสุด">
-          <div style={{ width: "100%", height: 220 }}>
+      <div className="sn-grid-2">
+        <Card title="แนวโน้ม 7 วันล่าสุด">
+          <div style={{ width: "100%", height: 200 }}>
             <ResponsiveContainer>
-              <BarChart data={months} barGap={4} barCategoryGap="28%">
-                <CartesianGrid vertical={false} stroke={T.paperLine} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: T.inkSoft }} axisLine={{ stroke: T.paperLine }} tickLine={false} />
+              <BarChart data={days} barGap={3}>
+                <CartesianGrid vertical={false} stroke={T.paperLine} strokeDasharray="3 4" />
+                <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} />
                 <YAxis hide />
                 <Tooltip
-                  formatter={(v: number, n: string) => [`฿${fmtMoney(v)}`, n === "income" ? "รายรับ" : n === "expense" ? "รายจ่าย" : "สุทธิ"]}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${T.paperLine}`, fontFamily: "IBM Plex Sans Thai" }}
+                  cursor={{ fill: "var(--surface-2)" }}
+                  formatter={(v: number, n: string) => [`฿${fmtMoney(v)}`, n === "income" ? "รายรับ" : "รายจ่าย"]}
+                  labelFormatter={() => ""}
+                  contentStyle={tooltipStyle}
                 />
-                <Legend
-                  formatter={(v) => (v === "income" ? "รายรับ" : v === "expense" ? "รายจ่าย" : v)}
-                  wrapperStyle={{ fontSize: 12, fontFamily: "IBM Plex Sans Thai" }}
-                  iconType="circle"
-                  iconSize={8}
-                />
-                <Bar dataKey="income" name="income" fill={T.income} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                <Bar dataKey="expense" name="expense" fill={T.expense} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="income" fill={T.income} radius={[6, 6, 0, 0]} maxBarSize={14} />
+                <Bar dataKey="expense" fill={T.expense} radius={[6, 6, 0, 0]} maxBarSize={14} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 10, overflowX: "auto" }}>
+        </Card>
+
+        <Card title="สัดส่วนรายจ่ายเดือนนี้">
+          {catData.length === 0 ? (
+            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: T.inkSoft, fontSize: 14 }}>ยังไม่มีรายจ่ายในเดือนนี้</div>
+          ) : (
+            <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ width: 150, height: 150, flexShrink: 0, margin: "0 auto" }}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie data={catData} dataKey="value" nameKey="name" innerRadius={46} outerRadius={72} paddingAngle={3} cornerRadius={4} stroke="none">
+                      {catData.map((c, i) => (
+                        <Cell key={i} fill={c.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => `฿${fmtMoney(v)}`} contentStyle={tooltipStyle} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ flex: 1, minWidth: 190, display: "flex", flexDirection: "column", gap: 10 }}>
+                {catData.slice(0, 5).map((c) => (
+                  <CategoryLegendRow key={c.id} cat={c} total={expense} />
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {hasMonthlyData && (
+        <Card title="เปรียบเทียบรายรับ-รายจ่าย 6 เดือนล่าสุด">
+          <div style={{ width: "100%", height: 230 }}>
+            <ResponsiveContainer>
+              <BarChart data={months} barGap={4} barCategoryGap="28%">
+                <CartesianGrid vertical={false} stroke={T.paperLine} strokeDasharray="3 4" />
+                <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip
+                  cursor={{ fill: "var(--surface-2)" }}
+                  formatter={(v: number, n: string) => [`฿${fmtMoney(v)}`, n === "income" ? "รายรับ" : n === "expense" ? "รายจ่าย" : "สุทธิ"]}
+                  contentStyle={tooltipStyle}
+                />
+                <Legend
+                  formatter={(v) => (v === "income" ? "รายรับ" : v === "expense" ? "รายจ่าย" : v)}
+                  wrapperStyle={{ fontSize: 12.5, color: "var(--muted)" }}
+                  iconType="circle"
+                  iconSize={8}
+                />
+                <Bar dataKey="income" name="income" fill={T.income} radius={[6, 6, 0, 0]} maxBarSize={24} />
+                <Bar dataKey="expense" name="expense" fill={T.expense} radius={[6, 6, 0, 0]} maxBarSize={24} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="sn-scroll" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", paddingBottom: 2 }}>
             {months.map((m) => (
-              <div key={m.label} style={{ flex: "1 0 auto", minWidth: 78, textAlign: "center", padding: "6px 4px", borderRadius: 8, background: T.paperDim }}>
-                <div style={{ fontSize: 10.5, color: T.inkSoft, fontWeight: 600 }}>{m.label}</div>
-                <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: m.net >= 0 ? T.income : T.expense }}>
+              <div key={m.label} style={{ flex: "1 0 auto", minWidth: 92, textAlign: "center", padding: "8px 6px", borderRadius: 12, background: T.paperDim }}>
+                <div style={{ fontSize: 12, color: T.inkSoft, fontWeight: 600 }}>{m.label}</div>
+                <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: m.net >= 0 ? T.income : T.expense }}>
                   {m.net >= 0 ? "+" : "-"}฿{fmtMoney(m.net)}
                 </div>
               </div>
@@ -140,35 +194,11 @@ export function Dashboard({
         </Card>
       )}
 
-      {catData.length > 0 && (
-        <Card title="สัดส่วนรายจ่ายเดือนนี้">
-          <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ width: 140, height: 140, flexShrink: 0 }}>
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie data={catData} dataKey="value" nameKey="name" innerRadius={38} outerRadius={62} paddingAngle={2}>
-                    {catData.map((c, i) => (
-                      <Cell key={i} fill={c.color} stroke={T.paper} strokeWidth={2} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => `฿${fmtMoney(v)}`} contentStyle={{ fontSize: 12, borderRadius: 8, fontFamily: "IBM Plex Sans Thai" }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div style={{ flex: 1, minWidth: 180, display: "flex", flexDirection: "column", gap: 8 }}>
-              {catData.map((c) => (
-                <CategoryLegendRow key={c.id} cat={c} total={expense} />
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
-
       <Card title="รายการล่าสุด" action={<button onClick={onSeeAll} style={ghostBtn}>ดูทั้งหมด</button>}>
         <div>
           {recent.map((t, i) => (
             <React.Fragment key={t.id}>
-              {i > 0 && <TearDivider />}
+              {i > 0 && <Divider />}
               <TxRow tx={t} onClick={() => onSeeDay(t.date)} />
             </React.Fragment>
           ))}
@@ -178,47 +208,46 @@ export function Dashboard({
   );
 }
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+function HeroStat({ icon: Icon, label, value, sub }: { icon: typeof ArrowUpRight; label: string; value: string; sub?: string }) {
   return (
-    <div style={{ border: `1px dashed ${T.paperLine}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
-      <div style={{ width: 52, height: 52, margin: "0 auto 16px", borderRadius: "50%", background: T.paperDim, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Wallet size={24} color={T.inkSoft} />
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 16, background: "rgba(255,255,255,0.14)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
+      <div style={{ width: 34, height: 34, borderRadius: 11, background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <Icon size={18} />
       </div>
-      <div style={{ fontWeight: 600, fontSize: 16 }}>ยังไม่มีรายการ</div>
-      <p style={{ fontSize: 13, color: T.inkSoft, margin: "6px 0 18px" }}>เริ่มบันทึกรายรับรายจ่ายวันนี้ เพื่อดูภาพรวมการเงินของคุณ</p>
-      <button onClick={onAdd} style={primaryBtn}>
-        <Plus size={15} /> บันทึกรายการแรก
-      </button>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, opacity: 0.85 }}>{label}</div>
+        <div className="mono" style={{ fontSize: 16, fontWeight: 700, overflowWrap: "anywhere" }}>
+          {value}
+          {sub && <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, marginLeft: 6 }}>{sub}</span>}
+        </div>
+      </div>
     </div>
   );
 }
 
-function StatChip({ icon: Icon, color, bg, label, value }: { icon: typeof TrendingUp; color: string; bg: string; label: string; value: number }) {
+function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <div style={{ width: 30, height: 30, borderRadius: 8, background: bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <Icon size={15} color={color} />
+    <div className="sn-card" style={{ borderStyle: "dashed", padding: "56px 24px", textAlign: "center", boxShadow: "none" }}>
+      <div style={{ width: 64, height: 64, margin: "0 auto 18px", borderRadius: 20, background: T.primarySoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Wallet size={28} color="var(--primary)" />
       </div>
-      <div>
-        <div style={{ fontSize: 11, color: T.inkSoft }}>{label}</div>
-        <div className="mono" style={{ fontSize: 15, fontWeight: 600, color }}>฿{fmtMoney(value)}</div>
-      </div>
+      <div style={{ fontWeight: 800, fontSize: 19 }}>เริ่มต้นสมุดเงินของคุณ</div>
+      <p style={{ fontSize: 14, color: T.inkSoft, margin: "6px auto 22px", maxWidth: 340 }}>บันทึกรายรับรายจ่ายรายการแรก แล้วภาพรวมการเงินและกราฟจะปรากฏที่นี่</p>
+      <button onClick={onAdd} style={primaryBtn}>
+        <Plus size={16} strokeWidth={2.6} /> บันทึกรายการแรก
+      </button>
     </div>
   );
 }
 
 function CategoryLegendRow({ cat, total }: { cat: { id: string; name: string; value: number; color: string }; total: number }) {
   const pct = total > 0 ? Math.round((cat.value / total) * 100) : 0;
-  const Icon = catById(cat.id).icon;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-      <div style={{ width: 22, height: 22, borderRadius: 6, background: cat.color + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <Icon size={12} color={cat.color} />
-      </div>
-      <span style={{ flexShrink: 0 }}>{cat.name}</span>
-      <span style={{ flex: 1, borderBottom: `1px dotted ${T.paperLine}`, transform: "translateY(-3px)" }} />
-      <span className="mono" style={{ color: T.inkSoft, fontSize: 12 }}>{pct}%</span>
-      <span className="mono" style={{ fontWeight: 600, minWidth: 74, textAlign: "right" }}>฿{fmtMoney(cat.value)}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>
+      <CategoryIcon id={cat.id} size={28} />
+      <span style={{ flex: 1, fontWeight: 500 }}>{cat.name}</span>
+      <span className="mono" style={{ color: T.inkSoft, fontSize: 12.5 }}>{pct}%</span>
+      <span className="mono" style={{ fontWeight: 700, minWidth: 76, textAlign: "right" }}>฿{fmtMoney(cat.value)}</span>
     </div>
   );
 }
