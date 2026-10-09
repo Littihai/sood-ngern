@@ -1,41 +1,95 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { T, catById, fmtMoney, fmtDateShort } from "../theme";
 import { Transaction } from "../types";
 
-export function TearDivider() {
-  const holes = new Array(28).fill(0);
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 4, margin: "10px 0" }} aria-hidden="true">
-      {holes.map((_, i) => (
-        <div key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: T.paperLine, flex: "1 0 auto" }} />
-      ))}
-    </div>
-  );
+/* ---------------------------------- layout ---------------------------------- */
+
+export function Divider() {
+  return <div role="separator" style={{ height: 1, background: T.paperLine, margin: "4px 0" }} />;
 }
 
-export function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+export function Card({ title, action, children }: { title?: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div style={{ border: `1px solid ${T.paperLine}`, borderRadius: 14, padding: "16px 18px", background: T.paper }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: T.inkSoft, textTransform: "uppercase", letterSpacing: 0.6 }}>{title}</div>
-        {action}
-      </div>
+    <section className="sn-card" style={{ padding: "18px 20px" }}>
+      {(title || action) && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 12 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: T.ink }}>{title}</h2>
+          {action}
+        </div>
+      )}
       {children}
-    </div>
+    </section>
   );
 }
 
-export function MiniStat({ label, value, color }: { label: string; value: number; color: string }) {
+export function MiniStat({ label, value, color, tone }: { label: string; value: number; color: string; tone?: string }) {
   return (
-    <div style={{ border: `1px solid ${T.paperLine}`, borderRadius: 12, padding: "10px 12px", background: T.paper }}>
-      <div style={{ fontSize: 11, color: T.inkSoft }}>{label}</div>
-      <div className="mono" style={{ fontSize: 15, fontWeight: 600, color, marginTop: 2 }}>
+    <div className="sn-card" style={{ padding: "12px 14px", background: tone ?? T.paper }}>
+      <div style={{ fontSize: 12, color: T.inkSoft, fontWeight: 500 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 17, fontWeight: 700, color, marginTop: 2, overflowWrap: "anywhere" }}>
         {value < 0 ? "-" : ""}฿{fmtMoney(value)}
       </div>
     </div>
   );
 }
+
+/** Pill-shaped tab switcher (e.g. expense / income, week / month). */
+export function Segmented<V extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+  fill,
+}: {
+  options: { id: V; label: string; color?: string }[];
+  value: V;
+  onChange: (v: V) => void;
+  ariaLabel: string;
+  fill?: boolean;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      style={{ display: "flex", background: T.paperDim, border: `1px solid ${T.paperLine}`, borderRadius: 14, padding: 4, width: fill ? "100%" : "fit-content", gap: 2 }}
+    >
+      {options.map((opt) => {
+        const active = value === opt.id;
+        return (
+          <button
+            key={opt.id}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(opt.id)}
+            style={{
+              flex: fill ? 1 : undefined, padding: "8px 18px", borderRadius: 10, border: "none", fontWeight: 600, fontSize: 14,
+              background: active ? T.paper : "transparent", color: active ? opt.color ?? T.ink : T.inkSoft,
+              boxShadow: active ? T.shadow : "none",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function CategoryIcon({ id, size = 40 }: { id: string; size?: number }) {
+  const cat = catById(id);
+  const Icon = cat.icon;
+  return (
+    <div
+      aria-hidden="true"
+      style={{ width: size, height: size, borderRadius: Math.round(size * 0.32), background: cat.color + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+    >
+      <Icon size={Math.round(size * 0.46)} color={cat.color} />
+    </div>
+  );
+}
+
+/* ------------------------------- transaction row ------------------------------- */
 
 export function TxRow({
   tx,
@@ -48,38 +102,28 @@ export function TxRow({
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const cat = catById(tx.category);
-  const Icon = cat.icon;
   const isIncome = tx.type === "income";
+  const title = tx.note ? tx.note : cat.label;
 
   return (
-    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", cursor: onClick ? "pointer" : "default" }}>
-      <div
-        style={{
-          width: 34, height: 34, borderRadius: 8, background: cat.color + "1c",
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-        }}
-      >
-        <Icon size={16} color={cat.color} />
-      </div>
+    <div
+      className={`sn-row${onClick ? " sn-row-click" : ""}`}
+      onClick={onClick}
+      style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 8px", margin: "0 -8px", borderRadius: 12 }}
+    >
+      <CategoryIcon id={tx.category} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {tx.note ? tx.note : cat.label}
-        </div>
-        <div style={{ fontSize: 11, color: T.inkSoft }}>
-          {cat.label} · {fmtDateShort(tx.date)}
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 5, maxWidth: 130, color: T.inkSoft, fontSize: 10.5 }}>
-        {tx.createdByPhotoURL ? (
-          <img src={tx.createdByPhotoURL} alt="" style={{ width: 16, height: 16, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-        ) : (
-          <span style={{ width: 16, height: 16, borderRadius: "50%", background: T.paperDim, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
-            {(tx.createdByName || "U").charAt(0).toUpperCase()}
+        <div style={{ fontSize: 14.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+        <div style={{ fontSize: 12, color: T.inkSoft, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <span style={{ whiteSpace: "nowrap" }}>
+            {cat.label} · {fmtDateShort(tx.date)}
           </span>
-        )}
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.createdByName || "Unknown"}</span>
+          <span aria-hidden="true">·</span>
+          <Avatar name={tx.createdByName || "Unknown"} photoURL={tx.createdByPhotoURL} size={14} />
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.createdByName || "Unknown"}</span>
+        </div>
       </div>
-      <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: isIncome ? T.income : T.expense, whiteSpace: "nowrap" }}>
+      <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: isIncome ? T.income : T.ink, whiteSpace: "nowrap" }}>
         {isIncome ? "+" : "-"}฿{fmtMoney(tx.amount)}
       </div>
       {onDelete && (
@@ -88,110 +132,102 @@ export function TxRow({
             e.stopPropagation();
             setShowConfirm(true);
           }}
-          style={{ background: "transparent", border: "none", color: T.inkSoft, padding: 4, marginLeft: 2, cursor: "pointer" }}
-          aria-label="ลบรายการ" // เพิ่มตรวจสอบก่อนลบรายการ
+          style={{ background: "transparent", border: "none", color: T.inkSoft, padding: 8, borderRadius: 8, display: "flex" }}
+          aria-label={`ลบรายการ ${title}`}
         >
-          <Trash2 size={14} />
+          <Trash2 size={16} />
         </button>
       )}
 
-      {/* Custom Confirmation Modal */}
       {showConfirm && (
-        <div 
-          style={modalOverlayStyle} 
-          onClick={(e) => { 
-            e.stopPropagation();
-            setShowConfirm(false); 
+        <ConfirmDialog
+          title="ยืนยันการลบรายการ"
+          message={`คุณต้องการลบรายการ "${title}" ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้`}
+          confirmLabel="ลบรายการ"
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={() => {
+            onDelete?.(tx.id);
+            setShowConfirm(false);
           }}
-        >
-          <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: T.ink, marginBottom: 6 }}>
-              ยืนยันการลบรายการ
-            </div>
-            <div style={{ fontSize: 12.5, color: T.inkSoft, marginBottom: 20, lineHeight: 1.4 }}>
-              คุณต้องการลบรายการ "{tx.note ? tx.note : cat.label}" ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <button
-                onClick={() => setShowConfirm(false)}
-                style={cancelBtnStyle}
-              >
-                ยกเลิก
-              </button>
-              <button
-                onClick={() => {
-                  onDelete?.(tx.id); // ใส่ Optional Chaining ลบเออร์เรอร์ TypeScript เรียบร้อย
-                  setShowConfirm(false);
-                }}
-                style={deleteBtnStyle}
-              >
-                ลบรายการ
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       )}
     </div>
   );
 }
 
-/* --- Styles ที่ใช้ร่วมกันในไฟล์ --- */
+export function Avatar({ name, photoURL, size = 28 }: { name: string; photoURL?: string | null; size?: number }) {
+  if (photoURL) {
+    return <img src={photoURL} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
+  }
+  return (
+    <span
+      aria-hidden="true"
+      style={{ width: size, height: size, borderRadius: "50%", background: T.primarySoft, color: T.primary, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: Math.max(9, size * 0.42), fontWeight: 700, flexShrink: 0 }}
+    >
+      {(name || "U").charAt(0).toUpperCase()}
+    </span>
+  );
+}
 
-const modalOverlayStyle: React.CSSProperties = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: "100vw",
-  height: "100vh",
-  backgroundColor: "rgba(0, 0, 0, 0.25)",
-  backdropFilter: "blur(4px)",
-  WebkitBackdropFilter: "blur(4px)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 9999,
-  cursor: "default",
-};
+export function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
 
-const modalContentStyle: React.CSSProperties = {
-  background: T.paper,
-  border: `1px solid ${T.paperLine}`,
-  borderRadius: 14,
-  padding: "20px 22px",
-  width: "90%",
-  maxWidth: 320,
-  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-};
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "var(--overlay)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, cursor: "default", padding: 16 }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onCancel();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="sn-page"
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: T.paper, border: `1px solid ${T.paperLine}`, borderRadius: 20, padding: "22px 22px 18px", width: "100%", maxWidth: 360, boxShadow: "var(--shadow-lg)" }}
+      >
+        <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>{title}</div>
+        <div style={{ fontSize: 14, color: T.inkSoft, marginBottom: 20, lineHeight: 1.5 }}>{message}</div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={onCancel} style={secondaryBtn} autoFocus>
+            ยกเลิก
+          </button>
+          <button onClick={onConfirm} style={{ ...primaryBtn, background: T.expense, color: "#fff" }}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-const cancelBtnStyle: React.CSSProperties = {
-  padding: "8px 14px",
-  borderRadius: 8,
-  border: "none",
-  background: T.paperDim,
-  color: T.inkSoft,
-  fontSize: 12.5,
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const deleteBtnStyle: React.CSSProperties = {
-  padding: "8px 14px",
-  borderRadius: 8,
-  border: "none",
-  background: T.expense,
-  color: "#ffffff",
-  fontSize: 12.5,
-  fontWeight: 600,
-  cursor: "pointer",
-};
+/* ----------------------------------- styles ----------------------------------- */
 
 export const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "9px 12px",
-  borderRadius: 8,
+  padding: "11px 14px",
+  borderRadius: 12,
   border: `1px solid ${T.paperLine}`,
   background: T.paper,
-  fontSize: 14,
+  fontSize: 16,
   color: T.ink,
   marginTop: 6,
   outline: "none",
@@ -201,28 +237,54 @@ export const primaryBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   gap: 6,
-  padding: "10px 18px",
-  borderRadius: 10,
+  padding: "11px 18px",
+  borderRadius: 12,
   border: "none",
-  background: T.ink,
-  color: T.paper,
+  background: T.primary,
+  color: T.onPrimary,
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+export const secondaryBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "11px 18px",
+  borderRadius: 12,
+  border: "none",
+  background: T.paperDim,
+  color: T.ink,
   fontWeight: 600,
-  fontSize: 13,
+  fontSize: 14,
 };
 
 export const ghostBtn: React.CSSProperties = {
   background: "transparent",
   border: "none",
-  color: T.gold,
-  fontSize: 12,
-  fontWeight: 600,
-  padding: 0,
+  color: T.primary,
+  fontSize: 13,
+  fontWeight: 700,
+  padding: "4px 0",
 };
 
 export const iconBtn: React.CSSProperties = {
-  background: "transparent",
+  background: T.paperDim,
   border: "none",
   color: T.ink,
-  padding: 6,
-  borderRadius: 8,
+  width: 36,
+  height: 36,
+  borderRadius: 10,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
+
+export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.inkSoft, flex: "1 1 220px" }}>
+      {label}
+      {children}
+    </label>
+  );
+}

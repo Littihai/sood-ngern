@@ -1,0 +1,307 @@
+/* ---------------------------------------------------------------------------
+   Design tokens — Modern Fintech
+   Light is the default; dark follows the OS unless the user picks a theme
+   (data-theme="light" | "dark" on <html>, set by useTheme).
+--------------------------------------------------------------------------- */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --surface-2: #f6f8fa;
+  --border: #e3e8ed;
+  --text: #0e1b26;
+  --muted: #5b6b79;
+
+  --primary: #047857;
+  --primary-soft: #e6f6ef;
+  --on-primary: #ffffff;
+
+  --income: #047857;
+  --income-bg: #e6f6ef;
+  --expense: #e11d48;
+  --expense-bg: #ffedf0;
+  --amber: #b45309;
+  --amber-bg: #fef3dc;
+
+  --hero: linear-gradient(135deg, #065f46 0%, #047857 48%, #0f766e 100%);
+  --shadow: 0 1px 2px rgba(15, 27, 38, 0.04), 0 4px 16px rgba(15, 27, 38, 0.06);
+  --shadow-lg: 0 12px 32px rgba(15, 27, 38, 0.16);
+  --overlay: rgba(10, 18, 24, 0.5);
+  --hover-filter: brightness(0.95);
+
+  --radius: 16px;
+  --radius-sm: 12px;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0a1014;
+  --surface: #121b21;
+  --surface-2: #18242b;
+  --border: #243239;
+  --text: #e9f0f3;
+  --muted: #92a4ae;
+
+  --primary: #34d399;
+  --primary-soft: #12302a;
+  --on-primary: #06251b;
+
+  --income: #34d399;
+  --income-bg: #11302a;
+  --expense: #fb7185;
+  --expense-bg: #35161d;
+  --amber: #fbbf24;
+  --amber-bg: #33280f;
+
+  --hero: linear-gradient(135deg, #0b3b30 0%, #0e5a47 52%, #0f6b63 100%);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --overlay: rgba(0, 0, 0, 0.62);
+  --hover-filter: brightness(1.14);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a1014;
+    --surface: #121b21;
+    --surface-2: #18242b;
+    --border: #243239;
+    --text: #e9f0f3;
+    --muted: #92a4ae;
+
+    --primary: #34d399;
+    --primary-soft: #12302a;
+    --on-primary: #06251b;
+
+    --income: #34d399;
+    --income-bg: #11302a;
+    --expense: #fb7185;
+    --expense-bg: #35161d;
+    --amber: #fbbf24;
+    --amber-bg: #33280f;
+
+    --hero: linear-gradient(135deg, #0b3b30 0%, #0e5a47 52%, #0f6b63 100%);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --overlay: rgba(0, 0, 0, 0.62);
+    --hover-filter: brightness(1.14);
+    color-scheme: dark;
+  }
+}
+
+/* --------------------------------- base --------------------------------- */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Plus Jakarta Sans", "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+/* Money / numbers: tabular figures so columns line up. */
+.mono,
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s, filter 0.15s, transform 0.1s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button:not(:disabled):hover {
+  filter: var(--hover-filter);
+}
+button:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+input,
+select {
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+input:focus,
+select:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  outline: none;
+}
+select {
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+input:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+.sn-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.sn-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+
+/* ------------------------------- components ------------------------------ */
+.sn-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.sn-row {
+  transition: background-color 0.15s;
+}
+.sn-row-click {
+  cursor: pointer;
+}
+.sn-row-click:hover {
+  background: var(--surface-2);
+}
+
+.sn-nav-item:hover {
+  background: var(--surface-2);
+}
+
+.sn-page {
+  animation: sn-fade-up 0.28s ease both;
+}
+@keyframes sn-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.sn-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  animation: sn-spin 0.8s linear infinite;
+}
+@keyframes sn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* grids that collapse on narrow screens */
+.sn-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.sn-calc {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sn-calc > .sn-calc-box {
+  flex: 1 1 130px;
+}
+
+/* ------------------------------ app shell ------------------------------- */
+.sn-main {
+  margin-left: 248px;
+}
+.sn-bottomnav {
+  display: none;
+}
+.sn-mobile-only {
+  display: none;
+}
+
+.sn-login {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+@media (max-width: 900px) {
+  .sn-login {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .sn-login-hero {
+    padding: 36px 24px 56px !important;
+  }
+  .sn-login-hero .sn-login-extra {
+    display: none !important;
+  }
+  .sn-login-panel {
+    margin-top: -28px;
+  }
+}
+
+@media (max-width: 767px) {
+  .sn-sidebar {
+    display: none !important;
+  }
+  .sn-bottomnav {
+    display: flex;
+  }
+  .sn-main {
+    margin-left: 0;
+    padding-bottom: 96px;
+  }
+  .sn-mobile-only {
+    display: flex;
+  }
+  .sn-grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .sn-calc-op {
+    display: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

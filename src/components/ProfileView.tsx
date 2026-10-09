@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Camera, Check, Save, User as UserIcon } from "lucide-react";
+import { Check, Save } from "lucide-react";
 import { User } from "firebase/auth";
 import { T } from "../theme";
-import { Card, inputStyle, primaryBtn } from "./shared";
+import { useTheme } from "../hooks/useTheme";
+import { Avatar, Card, Segmented, inputStyle, primaryBtn } from "./shared";
 
 export function ProfileView({
   user,
@@ -15,9 +16,9 @@ export function ProfileView({
   const [photoURL, setPhotoURL] = useState(user.photoURL || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const { pref, setPref } = useTheme();
 
   const nameForPreview = displayName.trim() || user.email || "User";
-  const initial = nameForPreview.charAt(0).toUpperCase();
 
   const handleSave = async () => {
     setSaving(true);
@@ -33,69 +34,58 @@ export function ProfileView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <Card title="Profile">
-        <div style={{ display: "grid", gridTemplateColumns: "120px minmax(0, 1fr)", gap: 18, alignItems: "start" }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-            <div
-              style={{
-                width: 92,
-                height: 92,
-                borderRadius: "50%",
-                background: T.paperDim,
-                border: `1px solid ${T.paperLine}`,
-                overflow: "hidden",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: T.inkSoft,
-              }}
-            >
-              {photoURL.trim() ? (
-                <img src={photoURL.trim()} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              ) : (
-                <span style={{ fontSize: 30, fontWeight: 700 }}>{initial}</span>
-              )}
+      <Card title="ข้อมูลส่วนตัว">
+        <div style={{ display: "flex", gap: 22, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, margin: "0 auto" }}>
+            <div style={{ borderRadius: "50%", padding: 4, background: T.hero }}>
+              <div style={{ borderRadius: "50%", border: `3px solid ${T.paper}`, overflow: "hidden", display: "flex" }}>
+                <Avatar name={nameForPreview} photoURL={photoURL.trim() || null} size={88} />
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, color: T.inkSoft, fontSize: 11 }}>
-              <Camera size={13} />
-              Preview
-            </div>
+            <div style={{ color: T.inkSoft, fontSize: 12 }}>ตัวอย่างรูปโปรไฟล์</div>
           </div>
 
-          <div style={{ minWidth: 0 }}>
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.inkSoft }}>
-              Display name
-              <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={user.email || "Your name"}
-                style={inputStyle}
-              />
+          <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.inkSoft }}>
+              ชื่อที่แสดง
+              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={user.email || "ชื่อของคุณ"} style={inputStyle} />
             </label>
 
-            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: T.inkSoft, marginTop: 12 }}>
-              Profile photo URL
-              <input
-                value={photoURL}
-                onChange={(e) => setPhotoURL(e.target.value)}
-                placeholder="https://example.com/me.jpg"
-                style={inputStyle}
-              />
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.inkSoft, marginTop: 14 }}>
+              ลิงก์รูปโปรไฟล์
+              <input value={photoURL} onChange={(e) => setPhotoURL(e.target.value)} placeholder="https://example.com/me.jpg" style={inputStyle} />
             </label>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18, flexWrap: "wrap" }}>
               <button onClick={handleSave} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>
-                {saved ? <Check size={15} /> : <Save size={15} />}
-                {saved ? "Saved" : saving ? "Saving..." : "Save profile"}
+                {saved ? <Check size={16} /> : <Save size={16} />}
+                {saved ? "บันทึกแล้ว" : saving ? "กำลังบันทึก..." : "บันทึกโปรไฟล์"}
               </button>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, color: T.inkSoft, fontSize: 12 }}>
-                <UserIcon size={13} />
-                {user.email}
-              </div>
+              <span style={{ color: T.inkSoft, fontSize: 13, overflowWrap: "anywhere" }}>{user.email}</span>
             </div>
           </div>
         </div>
       </Card>
+
+      <Card title="การแสดงผล">
+        <div style={{ fontSize: 13, color: T.inkSoft, marginBottom: 12 }}>เลือกธีมสว่าง/มืด หรือให้ตามการตั้งค่าของอุปกรณ์</div>
+        <ThemeOptions pref={pref} setPref={setPref} />
+      </Card>
     </div>
+  );
+}
+
+function ThemeOptions({ pref, setPref }: ReturnType<typeof useTheme>) {
+  return (
+    <Segmented
+      ariaLabel="ธีม"
+      value={pref}
+      onChange={setPref}
+      options={[
+        { id: "system", label: "ตามระบบ" },
+        { id: "light", label: "สว่าง" },
+        { id: "dark", label: "มืด" },
+      ]}
+    />
   );
 }
