@@ -199,7 +199,7 @@ select:focus-visible {
 }
 
 .sn-page {
-  animation: sn-fade-up 0.28s ease both;
+  animation: sn-fade-up 0.28s ease backwards;
 }
 @keyframes sn-fade-up {
   from {
@@ -219,6 +219,9 @@ select:focus-visible {
   border: 3px solid var(--border);
   border-top-color: var(--primary);
   animation: sn-spin 0.8s linear infinite;
+}
+.sn-spin-icon {
+  animation: sn-spin 0.9s linear infinite;
 }
 @keyframes sn-spin {
   to {

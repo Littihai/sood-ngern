@@ -13,6 +13,7 @@ import { DailyView } from "./components/DailyView";
 import { SummaryView } from "./components/SummaryView";
 import { ProfileView } from "./components/ProfileView";
 import { BookSwitcher } from "./components/BookSwitcher";
+import { DeleteAccountCard } from "./components/DeleteAccount";
 
 export default function App() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -89,6 +90,7 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
                   onDeleteBook={deleteBook}
                 />
                 <ProfileView user={userDisplayObj} onSave={updateUserProfile} />
+                <DeleteAccountCard user={userDisplayObj} />
                 <button
                   onClick={onSignOut}
                   className="sn-mobile-only"

@@ -211,13 +211,16 @@ service cloud.firestore {
 
       allow update: if isValidOwnerUpdate() || isValidMemberLeave();
 
-      allow delete: if false;
+      // Only the owner may hard-delete a book. Used by "delete my account", which
+      // first purges the book's transactions and join requests.
+      allow delete: if isAuthenticated() && resource.data.ownerUid == request.auth.uid;
 
       match /transactions/{txId} {
         allow read: if isBookMemberById(bookId);
         allow create: if canWriteBook(bookId) && isValidTransaction(request.resource.data);
         allow update: if canWriteBook(bookId) && isValidTransaction(request.resource.data) && txImmutableFieldsUnchanged();
-        allow delete: if canWriteBook(bookId);
+        // The owner can always purge (even a soft-deleted book) — needed for account deletion.
+        allow delete: if canWriteBook(bookId) || isBookOwner(bookId);
       }
 
       // Doc id == requester uid, so each person has at most one request per book.

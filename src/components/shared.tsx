@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Trash2 } from "lucide-react";
 import { T, catById, fmtMoney, fmtDateShort } from "../theme";
 import { Transaction } from "../types";
@@ -188,7 +189,8 @@ export function ConfirmDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
-  return (
+  // Rendered in <body>: an animated ancestor would otherwise become the containing block of `position: fixed`.
+  return createPortal(
     <div
       style={{ position: "fixed", inset: 0, background: "var(--overlay)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, cursor: "default", padding: 16 }}
       onClick={(e) => {
@@ -215,7 +217,8 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
