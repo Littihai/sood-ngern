@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     if (typeof window !== "undefined") {
       Object.keys(window.localStorage).forEach((key) => {
-        if (key.startsWith("sood-ngern-active-book-") || key === "sood-ngern-book-passwords") {
+        if (key.startsWith("sood-ngern-")) {
           window.localStorage.removeItem(key);
         }
       });

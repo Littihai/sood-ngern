@@ -24,17 +24,16 @@ export interface BookMember {
   joinedAt: number;
 }
 
+/** books/{bookId}/joinRequests/{requesterUid} — the doc id is the requester uid. */
 export interface JoinRequest {
   id: string;
   bookId: string;
-  bookName?: string;
   requesterUid: string;
   requesterName: string;
   requesterPhotoURL: string;
   requestedAt: number;
   role: BookRole;
-  status: "pending" | "approved" | "rejected";
-  joinPassword?: string;
+  status: "pending" | "rejected";
 }
 
 export interface SharedBook {
@@ -42,11 +41,11 @@ export interface SharedBook {
   name: string;
   ownerUid: string;
   ownerName: string;
-  joinPassword: string;
   memberIds: string[];
   members: Record<string, BookMember>;
   createdAt: number;
   updatedAt: number;
+  deleted?: boolean;
 }
 
 export type ActiveBook =

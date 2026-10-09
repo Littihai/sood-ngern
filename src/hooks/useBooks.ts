@@ -4,14 +4,15 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteDoc,
   deleteField,
   doc,
-  getDoc,
-  getDocs,
   onSnapshot,
   query,
+  setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { ActiveBook, BookMember, BookRole, JoinRequest, SharedBook } from "../types";
@@ -22,49 +23,53 @@ type Profile = {
   photoURL: string | null;
 };
 
+/** A join request the current user sent to someone else's book. */
+export type MyJoinRequest = { bookId: string; status: JoinRequest["status"] };
+
 const activeBookKey = (uid: string) => `sood-ngern-active-book-${uid}`;
 const bookListCacheKey = (uid: string) => `sood-ngern-books-${uid}`;
-const rememberedBookPasswordsKey = "sood-ngern-book-passwords";
+const pendingRequestsKey = (uid: string) => `sood-ngern-join-requests-${uid}`;
 
-function memberFromProfile(profile?: Profile, role: BookRole = "viewer"): BookMember {
+const displayNameOf = (profile?: Profile) => profile?.displayName || profile?.email || "Unknown user";
+
+function memberFromProfile(profile: Profile | undefined, role: BookRole): BookMember {
   return {
-    name: profile?.displayName || profile?.email || "Unknown user",
+    name: displayNameOf(profile),
     photoURL: profile?.photoURL || "",
     role,
     joinedAt: Date.now(),
   };
 }
 
-function rememberBookPassword(bookId: string, password: string) {
-  if (typeof window === "undefined") return;
-  const raw = window.localStorage.getItem(rememberedBookPasswordsKey);
-  const entries = raw ? (JSON.parse(raw) as Record<string, string>) : {};
-  entries[bookId] = password;
-  window.localStorage.setItem(rememberedBookPasswordsKey, JSON.stringify(entries));
-}
-
-function getRememberedBookPassword(bookId: string) {
-  if (typeof window === "undefined") return "";
-  const raw = window.localStorage.getItem(rememberedBookPasswordsKey);
-  if (!raw) return "";
-  const entries = JSON.parse(raw) as Record<string, string>;
-  return entries[bookId] || "";
-}
-
-function readCachedBooks(uid: string | undefined): SharedBook[] {
-  if (!uid || typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(bookListCacheKey(uid));
-  if (!raw) return [];
+function readJson<T>(key: string, fallback: T): T {
   try {
-    return JSON.parse(raw) as SharedBook[];
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
-    return [];
+    return fallback;
   }
 }
 
-function writeCachedBooks(uid: string | undefined, books: SharedBook[]) {
-  if (!uid || typeof window === "undefined") return;
-  window.localStorage.setItem(bookListCacheKey(uid), JSON.stringify(books));
+function writeJson(key: string, value: unknown) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // storage full / disabled — the cache is only an optimisation
+  }
+}
+
+/** Strips legacy fields so an old cached/remote doc can never leak a password into state. */
+function toSharedBook(id: string, data: Record<string, unknown>): SharedBook {
+  const rest = { ...data };
+  delete rest.joinPassword;
+  return { id, ...rest } as unknown as SharedBook;
+}
+
+function readCachedBooks(uid: string | undefined): SharedBook[] {
+  if (!uid) return [];
+  return readJson<SharedBook[]>(bookListCacheKey(uid), []).map((b) =>
+    toSharedBook(b.id, b as unknown as Record<string, unknown>)
+  );
 }
 
 export function useBooks(uid: string | undefined, profile?: Profile) {
@@ -75,30 +80,41 @@ export function useBooks(uid: string | undefined, profile?: Profile) {
   const [sharedBooks, setSharedBooks] = useState<SharedBook[]>(() => readCachedBooks(uid));
   const [loaded, setLoaded] = useState(false);
   const [activeBookId, setActiveBookId] = useState<string | null>(null);
+  const [pendingIds, setPendingIds] = useState<string[]>([]);
+  const [requestStatus, setRequestStatus] = useState<Record<string, JoinRequest["status"]>>({});
 
+  /* ------------------------------- books the user is a member of ------------------------------- */
   useEffect(() => {
     if (!uid) {
       setSharedBooks([]);
       setLoaded(true);
       setActiveBookId(null);
+      setPendingIds([]);
       return;
     }
-    const storedKey = window.localStorage.getItem(activeBookKey(uid)) || `personal:${uid}`;
-    const cachedBooks = readCachedBooks(uid);
-    if (cachedBooks.length > 0) {
-      setSharedBooks(cachedBooks);
-    }
-    setActiveBookId(storedKey);
+    setActiveBookId(window.localStorage.getItem(activeBookKey(uid)) || `personal:${uid}`);
+    setPendingIds(readJson<string[]>(pendingRequestsKey(uid), []));
     setLoaded(false);
-    const q = query(collection(db, "books"));
+
+    // Members-only query — the security rules reject anything broader.
+    const q = query(collection(db, "books"), where("memberIds", "array-contains", uid));
     const unsub = onSnapshot(
       q,
       (snap) => {
+        snap.docs.forEach((d) => {
+          // One-off migration: the old password flow stored `joinPassword` in plain text.
+          if (d.data().ownerUid === uid && "joinPassword" in d.data()) {
+            updateDoc(d.ref, { joinPassword: deleteField() }).catch((err) =>
+              console.error("could not remove legacy joinPassword", err)
+            );
+          }
+        });
         const books = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() } as SharedBook))
+          .map((d) => toSharedBook(d.id, d.data()))
+          .filter((b) => !b.deleted)
           .sort((a, b) => b.updatedAt - a.updatedAt);
         setSharedBooks(books);
-        writeCachedBooks(uid, books);
+        writeJson(bookListCacheKey(uid), books);
         setLoaded(true);
       },
       (err) => {
@@ -109,261 +125,271 @@ export function useBooks(uid: string | undefined, profile?: Profile) {
     return unsub;
   }, [uid]);
 
+  /* ------------------------------- my outgoing join requests ------------------------------- */
+  const pendingKey = pendingIds.join(",");
+  useEffect(() => {
+    if (!uid || pendingIds.length === 0) {
+      setRequestStatus({});
+      return;
+    }
+    const unsubs = pendingIds.map((bookId) =>
+      onSnapshot(
+        doc(db, "books", bookId, "joinRequests", uid),
+        (snap) => {
+          if (snap.exists()) {
+            setRequestStatus((prev) => ({ ...prev, [bookId]: (snap.data() as JoinRequest).status }));
+          } else {
+            // Approved (request deleted by the owner) or withdrawn — nothing left to track.
+            setRequestStatus((prev) => {
+              const rest = { ...prev };
+              delete rest[bookId];
+              return rest;
+            });
+            setPendingIds((prev) => {
+              const next = prev.filter((id) => id !== bookId);
+              writeJson(pendingRequestsKey(uid), next);
+              return next;
+            });
+          }
+        },
+        (err) => console.error("join request listener failed", err)
+      )
+    );
+    return () => unsubs.forEach((u) => u());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, pendingKey]);
+
+  const myRequests = useMemo<MyJoinRequest[]>(
+    () =>
+      pendingIds
+        .filter((bookId) => requestStatus[bookId])
+        .map((bookId) => ({ bookId, status: requestStatus[bookId] })),
+    [pendingIds, requestStatus]
+  );
+
   const books = useMemo(() => {
     return personalBook ? [personalBook, ...sharedBooks.map((book) => ({ ...book, kind: "shared" as const }))] : [];
   }, [personalBook, sharedBooks]);
 
   const activeBook = useMemo<ActiveBook | null>(() => {
     if (!personalBook) return null;
-    const found = books.find((book) => `${book.kind}:${book.id}` === activeBookId);
-    if (found?.kind === "shared") {
-      const isAccessible = Boolean(uid && found.memberIds.includes(uid));
-      if (!isAccessible) {
-        if (uid && activeBookId !== `personal:${uid}`) {
-          window.localStorage.setItem(activeBookKey(uid), `personal:${uid}`);
-        }
-        return personalBook;
-      }
-    }
-    return found || personalBook;
-  }, [activeBookId, books, personalBook, uid]);
+    return books.find((book) => `${book.kind}:${book.id}` === activeBookId) || personalBook;
+  }, [activeBookId, books, personalBook]);
 
-  const selectBook = useCallback(
-    (book: ActiveBook) => {
+  const rememberActive = useCallback(
+    (key: string) => {
       if (!uid) return;
-      if (book.kind === "shared" && !book.memberIds.includes(uid)) {
-        return;
-      }
-      const key = `${book.kind}:${book.id}`;
       window.localStorage.setItem(activeBookKey(uid), key);
       setActiveBookId(key);
     },
     [uid]
   );
 
+  const selectBook = useCallback((book: ActiveBook) => rememberActive(`${book.kind}:${book.id}`), [rememberActive]);
+
+  const findOwnedBook = useCallback(
+    (bookId: string, action: string) => {
+      const book = sharedBooks.find((b) => b.id === bookId);
+      if (!book) throw new Error("ไม่พบสมุดบัญชีนี้");
+      if (book.ownerUid !== uid) throw new Error(`เฉพาะเจ้าของสมุดเท่านั้นที่${action}ได้`);
+      return book;
+    },
+    [sharedBooks, uid]
+  );
+
+  /* ------------------------------- create / join ------------------------------- */
   const createSharedBook = useCallback(
-    async (name: string, password: string, rememberPassword: boolean) => {
+    async (name: string) => {
       if (!uid) return;
       const cleanName = name.trim();
-      const cleanPassword = password.trim();
-      if (!cleanName || cleanPassword.length < 4) return;
-      const ownerMember = { ...memberFromProfile(profile, "owner"), role: "owner" as const };
-      const createdAt = Date.now();
+      if (!cleanName) throw new Error("กรุณากรอกชื่อสมุดบัญชี");
+      const owner = memberFromProfile(profile, "owner");
+      const now = Date.now();
       const ref = await addDoc(collection(db, "books"), {
         name: cleanName,
         ownerUid: uid,
-        ownerName: ownerMember.name,
-        joinPassword: cleanPassword,
+        ownerName: owner.name,
         memberIds: [uid],
-        members: {
-          [uid]: ownerMember,
-        },
-        createdAt,
-        updatedAt: createdAt,
+        members: { [uid]: owner },
+        createdAt: now,
+        updatedAt: now,
       });
-      const optimisticBook: SharedBook = {
-        id: ref.id,
-        name: cleanName,
-        ownerUid: uid,
-        ownerName: ownerMember.name,
-        joinPassword: cleanPassword,
-        memberIds: [uid],
-        members: {
-          [uid]: ownerMember,
-        },
-        createdAt,
-        updatedAt: createdAt,
-      };
-      setSharedBooks((prev) => {
-        const next = [optimisticBook, ...prev.filter((book) => book.id !== ref.id)];
-        writeCachedBooks(uid, next);
-        return next;
-      });
-      if (rememberPassword) {
-        rememberBookPassword(ref.id, cleanPassword);
-      }
-      const key = `shared:${ref.id}`;
-      window.localStorage.setItem(activeBookKey(uid), key);
-      setActiveBookId(key);
+      rememberActive(`shared:${ref.id}`);
     },
-    [uid, profile]
+    [uid, profile, rememberActive]
   );
 
-  const joinSharedBook = useCallback(
-    async (bookId: string, password: string, rememberPassword: boolean) => {
+  /** Sends a join request; the book's owner must approve it. */
+  const requestJoin = useCallback(
+    async (bookId: string) => {
       if (!uid) return;
-      const cleanBookId = bookId.trim();
-      const cleanPassword = password.trim();
-      if (!cleanBookId || !cleanPassword) return;
-
-      const bookRef = doc(db, "books", cleanBookId);
-      const snap = await getDoc(bookRef);
-      if (!snap.exists()) {
-        throw new Error("ไม่พบสมุดบัญชีนี้");
-      }
-
-      const data = snap.data() as SharedBook;
-      if (data.memberIds.includes(uid)) {
-        if (rememberPassword) {
-          rememberBookPassword(cleanBookId, cleanPassword);
-        }
-        const key = `shared:${cleanBookId}`;
-        window.localStorage.setItem(activeBookKey(uid), key);
-        setActiveBookId(key);
+      const cleanId = bookId.trim();
+      if (!cleanId) throw new Error("กรุณากรอก ID ของสมุดบัญชี");
+      if (sharedBooks.some((b) => b.id === cleanId)) {
+        rememberActive(`shared:${cleanId}`);
         return;
       }
-
-      if (data.joinPassword !== cleanPassword) {
-        throw new Error("รหัสผ่านไม่ถูกต้อง");
-      }
-
-      await updateDoc(bookRef, {
-        memberIds: arrayUnion(uid),
-        [`members.${uid}`]: {
-          name: profile?.displayName || profile?.email || "Unknown user",
-          photoURL: profile?.photoURL || "",
+      try {
+        await setDoc(doc(db, "books", cleanId, "joinRequests", uid), {
+          requesterUid: uid,
+          requesterName: displayNameOf(profile),
+          requesterPhotoURL: profile?.photoURL || "",
+          requestedAt: Date.now(),
           role: "viewer" as BookRole,
-          joinedAt: Date.now(),
-        },
-        updatedAt: Date.now(),
-      });
-
-      if (rememberPassword) {
-        rememberBookPassword(cleanBookId, cleanPassword);
+          status: "pending",
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("permission")) {
+          throw new Error("ไม่พบสมุดบัญชีนี้ หรือคุณเป็นสมาชิกอยู่แล้ว");
+        }
+        throw err;
       }
-
-      const key = `shared:${cleanBookId}`;
-      window.localStorage.setItem(activeBookKey(uid), key);
-      setActiveBookId(key);
+      setPendingIds((prev) => {
+        const next = prev.includes(cleanId) ? prev : [...prev, cleanId];
+        writeJson(pendingRequestsKey(uid), next);
+        return next;
+      });
     },
-    [uid, profile]
+    [uid, profile, sharedBooks, rememberActive]
   );
 
-  const approveJoinRequest = useCallback(async () => {
-    return;
-  }, []);
+  const cancelRequest = useCallback(
+    async (bookId: string) => {
+      if (!uid) return;
+      await deleteDoc(doc(db, "books", bookId, "joinRequests", uid));
+    },
+    [uid]
+  );
 
-  const rejectJoinRequest = useCallback(async () => {
-    return;
-  }, []);
-
+  /* ------------------------------- owner / member management ------------------------------- */
   const changeMemberRole = useCallback(
     async (bookId: string, targetUid: string, role: BookRole) => {
-      if (!uid) return;
-      const bookRef = doc(db, "books", bookId);
-      const snap = await getDoc(bookRef);
-      if (!snap.exists()) throw new Error("ไม่พบสมุดบัญชีนี้");
-      const data = snap.data() as SharedBook;
-      if (data.ownerUid !== uid) throw new Error("เฉพาะเจ้าของสมุดเท่านั้นที่เปลี่ยนสิทธิ์สมาชิกได้");
+      findOwnedBook(bookId, "เปลี่ยนสิทธิ์สมาชิก");
       if (targetUid === uid) throw new Error("ไม่สามารถเปลี่ยนสิทธิ์ของตัวเองได้");
-      await updateDoc(bookRef, {
+      await updateDoc(doc(db, "books", bookId), {
         [`members.${targetUid}.role`]: role,
         updatedAt: Date.now(),
       });
     },
-    [uid]
+    [uid, findOwnedBook]
   );
 
   const removeMember = useCallback(
     async (bookId: string, targetUid: string) => {
-      if (!uid) return;
-      const bookRef = doc(db, "books", bookId);
-      const snap = await getDoc(bookRef);
-      if (!snap.exists()) throw new Error("ไม่พบสมุดบัญชีนี้");
-      const data = snap.data() as SharedBook;
-      if (data.ownerUid !== uid) throw new Error("เฉพาะเจ้าของสมุดเท่านั้นที่ลบสมาชิกได้");
+      findOwnedBook(bookId, "ลบสมาชิก");
       if (targetUid === uid) throw new Error("ไม่สามารถลบตัวเองจากสมุดได้ กรุณาใช้ออกจากสมุดบัญชี");
-      await updateDoc(bookRef, {
+      await updateDoc(doc(db, "books", bookId), {
         memberIds: arrayRemove(targetUid),
         [`members.${targetUid}`]: deleteField(),
         updatedAt: Date.now(),
       });
     },
-    [uid]
+    [uid, findOwnedBook]
   );
 
   const leaveBook = useCallback(
     async (bookId: string) => {
       if (!uid) return;
-      const bookRef = doc(db, "books", bookId);
-      const snap = await getDoc(bookRef);
-      if (!snap.exists()) throw new Error("ไม่พบสมุดบัญชีนี้");
-      const data = snap.data() as SharedBook;
-      if (data.ownerUid === uid) throw new Error("เจ้าของสมุดต้องโอนสิทธิ์ก่อนออกจากสมุด");
-      await updateDoc(bookRef, {
+      const book = sharedBooks.find((b) => b.id === bookId);
+      if (book?.ownerUid === uid) throw new Error("เจ้าของสมุดไม่สามารถออกจากสมุดได้ ต้องลบสมุดแทน");
+      rememberActive(`personal:${uid}`);
+      await updateDoc(doc(db, "books", bookId), {
         memberIds: arrayRemove(uid),
         [`members.${uid}`]: deleteField(),
         updatedAt: Date.now(),
       });
-      window.localStorage.setItem(activeBookKey(uid), `personal:${uid}`);
-      setActiveBookId(`personal:${uid}`);
     },
-    [uid]
+    [uid, sharedBooks, rememberActive]
   );
 
   const updateBookName = useCallback(
     async (bookId: string, name: string) => {
-      if (!uid) return;
+      findOwnedBook(bookId, "เปลี่ยนชื่อ");
       const cleanName = name.trim();
       if (!cleanName) throw new Error("กรุณากรอกชื่อสมุดบัญชี");
-      const bookRef = doc(db, "books", bookId);
-      const snap = await getDoc(bookRef);
-      if (!snap.exists()) throw new Error("ไม่พบสมุดบัญชีนี้");
-      const data = snap.data() as SharedBook;
-      if (data.ownerUid !== uid) throw new Error("เฉพาะเจ้าของสมุดเท่านั้นที่เปลี่ยนชื่อได้");
-      await updateDoc(bookRef, { name: cleanName, updatedAt: Date.now() });
+      await updateDoc(doc(db, "books", bookId), { name: cleanName, updatedAt: Date.now() });
     },
-    [uid]
+    [findOwnedBook]
   );
 
-  const updateBookPassword = useCallback(
-    async (bookId: string, password: string) => {
-      if (!uid) return;
-      const cleanPassword = password.trim();
-      if (cleanPassword.length < 4) throw new Error("รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร");
-      const bookRef = doc(db, "books", bookId);
-      const snap = await getDoc(bookRef);
-      if (!snap.exists()) throw new Error("ไม่พบสมุดบัญชีนี้");
-      const data = snap.data() as SharedBook;
-      if (data.ownerUid !== uid) throw new Error("เฉพาะเจ้าของสมุดเท่านั้นที่เปลี่ยนรหัสผ่านได้");
-      await updateDoc(bookRef, { joinPassword: cleanPassword, updatedAt: Date.now() });
-    },
-    [uid]
-  );
-
+  /** Soft delete: the book disappears for every member; transactions are kept (and locked). */
   const deleteBook = useCallback(
     async (bookId: string) => {
       if (!uid) return;
-      const bookRef = doc(db, "books", bookId);
-      const snap = await getDoc(bookRef);
-      if (!snap.exists()) throw new Error("ไม่พบสมุดบัญชีนี้");
-      const data = snap.data() as SharedBook;
-      if (data.ownerUid !== uid) throw new Error("เฉพาะเจ้าของสมุดเท่านั้นที่ลบสมุดได้");
-      await updateDoc(bookRef, { deleted: true, updatedAt: Date.now() });
-      if (activeBookId === `shared:${bookId}`) {
-        window.localStorage.setItem(activeBookKey(uid), `personal:${uid}`);
-        setActiveBookId(`personal:${uid}`);
-      }
+      findOwnedBook(bookId, "ลบสมุด");
+      if (activeBookId === `shared:${bookId}`) rememberActive(`personal:${uid}`);
+      await updateDoc(doc(db, "books", bookId), { deleted: true, updatedAt: Date.now() });
     },
-    [activeBookId, uid]
+    [uid, activeBookId, findOwnedBook, rememberActive]
   );
 
   return {
     books,
-    sharedBooks,
     activeBook,
     loaded,
     selectBook,
     createSharedBook,
-    joinSharedBook,
-    approveJoinRequest,
-    rejectJoinRequest,
+    requestJoin,
+    cancelRequest,
+    myRequests,
     changeMemberRole,
     removeMember,
     leaveBook,
     updateBookName,
-    updateBookPassword,
     deleteBook,
-    getRememberedBookPassword,
   };
+}
+
+/** Incoming join requests for a book the current user owns. */
+export function useJoinRequests(bookId: string | null) {
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
+
+  useEffect(() => {
+    if (!bookId) {
+      setRequests([]);
+      return;
+    }
+    const unsub = onSnapshot(
+      collection(db, "books", bookId, "joinRequests"),
+      (snap) => {
+        setRequests(
+          snap.docs
+            .map((d) => ({ id: d.id, bookId, ...d.data() } as JoinRequest))
+            .sort((a, b) => a.requestedAt - b.requestedAt)
+        );
+      },
+      (err) => console.error("join requests listener failed", err)
+    );
+    return unsub;
+  }, [bookId]);
+
+  /** Adds the requester to the book and clears the request in one atomic write. */
+  const approve = useCallback(
+    async (request: JoinRequest, role: BookRole) => {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "books", request.bookId), {
+        memberIds: arrayUnion(request.requesterUid),
+        [`members.${request.requesterUid}`]: {
+          name: request.requesterName,
+          photoURL: request.requesterPhotoURL,
+          role,
+          joinedAt: Date.now(),
+        } satisfies BookMember,
+        updatedAt: Date.now(),
+      });
+      batch.delete(doc(db, "books", request.bookId, "joinRequests", request.id));
+      await batch.commit();
+    },
+    []
+  );
+
+  const reject = useCallback(async (request: JoinRequest) => {
+    await updateDoc(doc(db, "books", request.bookId, "joinRequests", request.id), { status: "rejected" });
+  }, []);
+
+  const clear = useCallback(async (request: JoinRequest) => {
+    await deleteDoc(doc(db, "books", request.bookId, "joinRequests", request.id));
+  }, []);
+
+  return { requests, approve, reject, clear };
 }
