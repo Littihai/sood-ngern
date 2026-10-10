@@ -81,7 +81,7 @@ service cloud.firestore {
       validString(data, "category", 1, 40) &&
       validString(data, "note", 0, 500) &&
       data.date is string &&
-      data.date.matches("^\\d{4}-\\d{2}-\\d{2}$") &&
+      data.date.matches("^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$") &&
       validEpochMs(data, "createdAt") &&
       data.createdByUid == request.auth.uid &&
       validString(data, "createdByName", 1, 100) &&
@@ -91,6 +91,16 @@ service cloud.firestore {
     function txImmutableFieldsUnchanged() {
       return request.resource.data.createdAt == resource.data.createdAt &&
         request.resource.data.createdByUid == resource.data.createdByUid;
+    }
+
+    // Account deletion: any member — whatever their current role — may strip their own
+    // identity from the entries they wrote. Nothing else about the entry may change.
+    function isOwnTxAnonymization(bookId) {
+      return isBookMemberById(bookId) &&
+        resource.data.createdByUid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["createdByName", "createdByPhotoURL"]) &&
+        request.resource.data.createdByName == "ผู้ใช้ที่ลบบัญชี" &&
+        request.resource.data.createdByPhotoURL == "";
     }
 
     function isValidMember(member, role) {
@@ -202,6 +212,15 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    // "Which books did I ask to join?" — kept server-side so it works on every device and
+    // so account deletion can withdraw every pending request. Private to the user.
+    match /users/{userId}/joinRequestRefs/{bookId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) &&
+        request.resource.data.keys().hasOnly(["requestedAt"]) &&
+        validEpochMs(request.resource.data, "requestedAt");
+    }
+
     match /books/{bookId} {
       allow create: if isAuthenticated() && isValidCreatedBook(request.resource.data);
 
@@ -218,7 +237,8 @@ service cloud.firestore {
       match /transactions/{txId} {
         allow read: if isBookMemberById(bookId);
         allow create: if canWriteBook(bookId) && isValidTransaction(request.resource.data);
-        allow update: if canWriteBook(bookId) && isValidTransaction(request.resource.data) && txImmutableFieldsUnchanged();
+        allow update: if (canWriteBook(bookId) && isValidTransaction(request.resource.data) && txImmutableFieldsUnchanged()) ||
+          isOwnTxAnonymization(bookId);
         // The owner can always purge (even a soft-deleted book) — needed for account deletion.
         allow delete: if canWriteBook(bookId) || isBookOwner(bookId);
       }
