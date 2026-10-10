@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/TypeScript-5.5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Vite-5.3-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" />
   <img src="https://img.shields.io/badge/Firebase-11-FFCA28?style=flat-square&logo=firebase&logoColor=black" alt="Firebase" />
-  <img src="https://img.shields.io/badge/rules%20tests-27%20passing-2F6D46?style=flat-square" alt="rules tests" />
+  <img src="https://img.shields.io/badge/tests-35%20rules%20%2B%2047%20unit-2F6D46?style=flat-square" alt="tests" />
 </p>
 
 ---
@@ -59,7 +59,7 @@
 ## 🏗️ สถาปัตยกรรม
 
 แอปเป็น Single-Page App ที่คุยกับ Firebase โดยตรงจากเบราว์เซอร์ ไม่มี backend ของตัวเอง
-ความปลอดภัยทั้งหมดจึงบังคับด้วย **Firestore Security Rules** (ทดสอบอัตโนมัติ 27 กรณี)
+ความปลอดภัยทั้งหมดจึงบังคับด้วย **Firestore Security Rules** (ทดสอบอัตโนมัติ 35 กรณี)
 
 ```mermaid
 flowchart LR
@@ -87,6 +87,7 @@ books/{bookId}                           สมุดร่วม — อ่า�
   members: { [uid]: { name, photoURL, role, joinedAt } }
 books/{bookId}/transactions/{txId}       รายการในสมุดร่วม
 books/{bookId}/joinRequests/{uid}        คำขอเข้าร่วม (doc id = uid ผู้ขอ)
+users/{uid}/joinRequestRefs/{bookId}     รายการสมุดที่ฉันขอเข้าร่วม (ใช้ได้ทุกอุปกรณ์ + ใช้ถอนคำขอตอนลบบัญชี)
 ```
 
 ### สิทธิ์ในสมุดร่วม
@@ -108,7 +109,7 @@ books/{bookId}/joinRequests/{uid}        คำขอเข้าร่วม (d
 
 - ข้อมูลส่วนตัวแยกตาม `uid`; สมุดร่วมอ่านได้เฉพาะสมาชิก; เจ้าของเป็นผู้เดียวที่อนุมัติสมาชิก
 - ตรวจรูปแบบข้อมูลฝั่ง server (ประเภท จำนวนเงิน ความยาวข้อความ URL รูป) และห้ามเปลี่ยนผู้สร้างรายการ
-- ชุดทดสอบ `tests/firestore.rules.test.ts` ครอบคลุม **27 กรณี** เช่น คนนอกอ่านสมุด/ใส่ตัวเองเป็นสมาชิกไม่ได้, Viewer เขียนไม่ได้, สมาชิกลบคนอื่นหรือเลื่อนสิทธิ์ตัวเองไม่ได้
+- ชุดทดสอบ `tests/rules/firestore.rules.test.ts` ครอบคลุม **35 กรณี** เช่น คนนอกอ่านสมุด/ใส่ตัวเองเป็นสมาชิกไม่ได้, Viewer เขียนไม่ได้, สมาชิกลบคนอื่นหรือเลื่อนสิทธิ์ตัวเองไม่ได้
 - รายละเอียดเชิงลึก: [docs/SECURITY.md](docs/SECURITY.md) · นโยบายความเป็นส่วนตัว: [`/privacy.html`](public/privacy.html)
 
 > แอปใช้ **Firebase Analytics** เก็บสถิติการใช้งานแบบไม่ระบุตัวตน (ระบุไว้ในนโยบายความเป็นส่วนตัวแล้ว)
@@ -151,7 +152,8 @@ sequenceDiagram
 |---|---|
 | รายการรับ-จ่ายส่วนตัว | ลบถาวร |
 | สมุดร่วมที่เป็นเจ้าของ | ลบถาวร (รวมรายการและคำขอเข้าร่วม) — สมาชิกคนอื่นจะเข้าไม่ได้อีก (แสดงชัดในหน้ายืนยัน) |
-| สมุดร่วมที่เป็นสมาชิก | ถูกนำออกจากสมุด; รายการที่เคยบันทึกคงอยู่ในสมุดแต่ไม่แสดงตัวตน |
+| สมุดร่วมที่เป็นสมาชิก | ถูกนำออกจากสมุด (ทุกบทบาท รวมถึงอดีต Editor); รายการที่เคยบันทึกคงอยู่ในสมุดแต่ไม่แสดงตัวตน |
+| คำขอเข้าร่วมที่ค้างอยู่ | ถอนทั้งหมด (รายการเก็บใน Firestore จึงครบแม้ใช้หลายอุปกรณ์) |
 | บัญชีเข้าสู่ระบบ | ลบออกจาก Firebase Auth |
 
 ทุกขั้นตอนทำซ้ำได้อย่างปลอดภัย (idempotent) หากขัดข้องกลางทางสามารถกดลองใหม่ได้ รายละเอียด: [docs/ACCOUNT-DELETION.md](docs/ACCOUNT-DELETION.md)
@@ -183,7 +185,8 @@ npm run dev                  # http://localhost:5173
 | `npm run dev` | รัน dev server |
 | `npm run build` | ตรวจ type แล้ว build production |
 | `npm run lint` | ESLint |
-| `npm run test:rules` | ทดสอบ Firestore Security Rules กับ Emulator (ต้องมี JDK 21+) |
+| `npm test` | Unit test (โปรไฟล์, ฟอร์ม, CSV) 47 เทสต์ |
+| `npm run test:rules` | ทดสอบ Firestore Security Rules กับ Emulator 35 เทสต์ (ต้องมี JDK 21+) |
 
 ### Deploy
 
@@ -194,7 +197,7 @@ firebase deploy --only hosting
 ```
 
 > ยังไม่มี CI/CD ใน repo นี้ หากต้องการ auto-deploy ให้เพิ่ม workflow ด้วย `FirebaseExtended/action-hosting-deploy`
-> และรัน `npm run test:rules` เป็นขั้นตอนตรวจก่อน deploy
+> และรัน `npm test` กับ `npm run test:rules` เป็นขั้นตอนตรวจก่อน deploy
 
 ---
 
@@ -204,15 +207,16 @@ firebase deploy --only hosting
 src/
  ├─ main.tsx · App.tsx · firebase.ts · theme.ts · types.ts · styles.css
  ├─ contexts/AuthContext.tsx        ล็อกอิน, ลบบัญชี
- ├─ lib/accountDeletion.ts          ตรรกะลบข้อมูลทั้งหมดของผู้ใช้ (แผน, ส่งออก CSV, purge)
+ ├─ lib/                            ตรรกะที่ไม่พึ่ง UI: accountDeletion (ลบข้อมูล), profile / transactionForm (ตรวจค่าให้ตรงกับ rules), csv (ส่งออกอย่างปลอดภัย)
  ├─ hooks/
  │   ├─ useTransactions.ts          รายการ (realtime)
  │   ├─ useBooks.ts                 สมุดร่วม, คำขอเข้าร่วม, จัดการสมาชิก
- │   └─ useAction.ts · useTheme.ts
+ │   └─ useAction.ts · useTheme.ts · useFocusTrap.ts
  └─ components/
      ├─ Login · Layout · Dashboard · AddForm · DailyView · SummaryView
      └─ ProfileView · DeleteAccount · BookSwitcher · BookMembers · shared
-tests/firestore.rules.test.ts        ทดสอบ Security Rules (Emulator)
+tests/rules/                         ทดสอบ Security Rules กับ Firestore Emulator
+tests/unit/                          Unit test ของตรรกะที่ไม่พึ่ง Firebase
 firestore.rules · firebase.json      กฎความปลอดภัยและการตั้งค่า Firebase
 public/privacy.html                  นโยบายความเป็นส่วนตัว (ใช้กับ App Store / Play Store)
 docs/                                เอกสารเชิงลึกและภาพหน้าจอ
@@ -223,10 +227,10 @@ docs/                                เอกสารเชิงลึกแ�
 ## 🗺️ แผนต่อยอด
 
 - แอปมือถือ (Android/iOS) ด้วย Capacitor — ต้องเปลี่ยน Google Sign-in เป็นแบบ native และเพิ่ม Sign in with Apple
-- ติดตั้ง CI (lint + build + `test:rules`)
+- ติดตั้ง CI (lint + build + `npm test` + `test:rules`)
 - แก้ไขรายการที่บันทึกไว้, งบประมาณรายหมวด, ส่งออกข้อมูลทั้งหมด
 
 ## 🤝 Contributing · 📄 License
 
-Fork แล้วเปิด Pull Request ได้เลย (กรุณารัน `npm run lint` และ `npm run test:rules` ก่อน)
+Fork แล้วเปิด Pull Request ได้เลย (กรุณารัน `npm run lint`, `npm test` และ `npm run test:rules` ก่อน)
 โปรเจคนี้ยังไม่ได้ระบุ License — โปรดติดต่อเจ้าของ repository หากต้องการนำไปใช้ต่อ
