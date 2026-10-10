@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { SharedBook, Transaction } from "../types";
+import { transactionsToCsv } from "./csv";
 
 /** Shown in shared ledgers in place of a deleted user's name. */
 export const DELETED_USER_NAME = "ผู้ใช้ที่ลบบัญชี";
@@ -59,14 +60,7 @@ export async function planAccountDeletion(uid: string): Promise<DeletionPlan> {
 /** Personal transactions as a CSV (UTF-8 with BOM so Excel shows Thai correctly). */
 export async function exportPersonalCsv(uid: string): Promise<string> {
   const snap = await getDocs(collection(db, "users", uid, "transactions"));
-  const rows = snap.docs
-    .map((d) => d.data() as Transaction)
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-  const lines = [["date", "type", "category", "amount", "note"].join(",")].concat(
-    rows.map((t) => [t.date, t.type, t.category, t.amount, t.note].map(esc).join(","))
-  );
-  return "﻿" + lines.join("\r\n");
+  return transactionsToCsv(snap.docs.map((d) => d.data() as Transaction));
 }
 
 /** Deletes every document of a (sub)collection in batches. */
@@ -110,8 +104,9 @@ export async function purgeUserData(uid: string, onStep: (step: DeletionStep) =>
       await purgeCollection(collection(db, "books", book.id, "joinRequests"));
       await deleteDoc(doc(db, "books", book.id));
     } else {
-      // Member: keep the shared history but remove the person's identity, then leave.
-      if (book.members[uid]?.role === "editor" && !book.deleted) await anonymizeTransactions(book.id, uid);
+      // Member: keep the shared history but remove the person's identity (whatever their role is
+      // now — a former editor demoted to viewer may still own entries), then leave.
+      await anonymizeTransactions(book.id, uid);
       await updateDoc(doc(db, "books", book.id), {
         memberIds: arrayRemove(uid),
         [`members.${uid}`]: deleteField(),
@@ -120,12 +115,17 @@ export async function purgeUserData(uid: string, onStep: (step: DeletionStep) =>
     }
   }
 
-  // Withdraw join requests this user sent that are still waiting (best effort).
+  // Withdraw every join request this user sent — they carry the user's name and photo into
+  // other people's books. The list lives in Firestore, so it is complete on any device.
+  const refs = collection(db, "users", uid, "joinRequestRefs");
+  const refSnap = await getDocs(refs);
+  const bookIds = new Set(refSnap.docs.map((d) => d.id));
   try {
-    const raw = window.localStorage.getItem(`sood-ngern-join-requests-${uid}`);
-    const ids = raw ? (JSON.parse(raw) as string[]) : [];
-    await Promise.all(ids.map((id) => deleteDoc(doc(db, "books", id, "joinRequests", uid)).catch(() => undefined)));
+    // ids saved by an older version that were never migrated
+    JSON.parse(window.localStorage.getItem(`sood-ngern-join-requests-${uid}`) || "[]").forEach((id: string) => bookIds.add(id));
   } catch {
-    // local list unreadable — nothing to withdraw
+    // unreadable local list — the Firestore list is authoritative
   }
+  await Promise.all([...bookIds].map((id) => deleteDoc(doc(db, "books", id, "joinRequests", uid)).catch(() => undefined)));
+  await purgeCollection(refs);
 }

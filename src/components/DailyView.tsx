@@ -13,7 +13,7 @@ export function DailyView({
   transactions: Transaction[];
   selectedDate: string;
   setSelectedDate: (iso: string) => void;
-  onDelete: (id: string) => void;
+  onDelete?: (id: string) => void | Promise<void>;
 }) {
   const dayTx = transactions.filter((t) => t.date === selectedDate).sort((a, b) => b.createdAt - a.createdAt);
   const income = dayTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);

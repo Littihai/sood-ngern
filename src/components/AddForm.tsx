@@ -2,16 +2,19 @@ import React, { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { T, catsForType, todayISO, EXPENSE_CATS } from "../theme";
 import { NewTransaction, TransactionType } from "../types";
+import { AMOUNT_PATTERN, validateTransactionInput } from "../lib/transactionForm";
 import { Segmented, inputStyle, primaryBtn } from "./shared";
 
 const QUICK_AMOUNTS = [50, 100, 500, 1000];
 
-export function AddForm({ onSubmit, savedFlash }: { onSubmit: (tx: NewTransaction) => void; savedFlash: boolean }) {
+export function AddForm({ onSubmit, savedFlash }: { onSubmit: (tx: NewTransaction) => Promise<void>; savedFlash: boolean }) {
   const [type, setType] = useState<TransactionType>("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(EXPENSE_CATS[0].id);
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayISO());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const cats = catsForType(type);
 
@@ -21,14 +24,30 @@ export function AddForm({ onSubmit, savedFlash }: { onSubmit: (tx: NewTransactio
   }, [type]);
 
   const value = parseFloat(amount);
-  const canSave = !!value && value > 0;
+  const errors = validateTransactionInput({ amount, date });
+  const canSave = !errors.amount && !errors.date && !busy;
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!canSave) return;
-    onSubmit({ type, amount: value, category, note: note.trim(), date });
-    setAmount("");
-    setNote("");
+    setError("");
+    setBusy(true);
+    try {
+      await onSubmit({ type, amount: value, category, note: note.trim(), date });
+      // Only clear the form once the save really succeeded — otherwise the user would lose their input.
+      setAmount("");
+      setNote("");
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "";
+      setError(
+        message.includes("permission") || message.includes("Missing or insufficient")
+          ? "บันทึกไม่สำเร็จ: ไม่มีสิทธิ์หรือข้อมูลไม่ถูกต้อง ข้อมูลที่กรอกยังอยู่ ลองตรวจสอบแล้วบันทึกอีกครั้ง"
+          : message || "บันทึกไม่สำเร็จ ข้อมูลที่กรอกยังอยู่ กรุณาลองอีกครั้ง"
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const accent = type === "income" ? T.income : T.expense;
@@ -59,8 +78,9 @@ export function AddForm({ onSubmit, savedFlash }: { onSubmit: (tx: NewTransactio
             value={amount}
             onChange={(e) => {
               const v = e.target.value;
-              if (/^\d*\.?\d{0,2}$/.test(v)) setAmount(v);
+              if (AMOUNT_PATTERN.test(v)) setAmount(v);
             }}
+            aria-invalid={!!amount && !!errors.amount}
             placeholder="0.00"
             className="mono"
             style={{ border: "none", outline: "none", background: "transparent", fontSize: 44, fontWeight: 800, color: T.ink, width: `${Math.max(amount.length, 4) + 0.6}ch`, maxWidth: "75%", textAlign: "center", letterSpacing: -1, boxShadow: "none" }}
@@ -109,13 +129,24 @@ export function AddForm({ onSubmit, savedFlash }: { onSubmit: (tx: NewTransactio
       <div className="sn-card" style={{ padding: "16px 18px", display: "flex", gap: 14, flexWrap: "wrap" }}>
         <label style={{ flex: "1 1 160px", fontSize: 13, fontWeight: 600, color: T.inkSoft }}>
           วันที่
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-invalid={!!errors.date} aria-describedby={errors.date ? "date-error" : undefined} required style={{ ...inputStyle, ...(errors.date ? { borderColor: "var(--expense)" } : null) }} />
+          {errors.date && (
+            <span id="date-error" role="alert" style={{ display: "block", color: T.expense, fontSize: 12.5, fontWeight: 500, marginTop: 4 }}>
+              {errors.date}
+            </span>
+          )}
         </label>
         <label style={{ flex: "2 1 220px", fontSize: 13, fontWeight: 600, color: T.inkSoft }}>
           รายละเอียด (ไม่บังคับ)
           <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น กาแฟตอนเช้า" maxLength={500} style={inputStyle} />
         </label>
       </div>
+
+      {error && (
+        <div role="alert" style={{ background: T.expenseBg, color: T.expense, borderRadius: 14, padding: "12px 14px", fontSize: 14, fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
 
       <button
         type="submit"

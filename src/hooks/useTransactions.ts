@@ -10,6 +10,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { ActiveBook, NewTransaction, Transaction } from "../types";
+import { safeDisplayName, safePhotoURL } from "../lib/profile";
 
 export function useTransactions(
   uid: string | undefined,
@@ -18,6 +19,10 @@ export function useTransactions(
 ) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  // Values that end up on every entry we write: always within the limits the rules accept.
+  const authorName = safeDisplayName({ displayName: profile?.displayName, email: profile?.email });
+  const authorPhoto = safePhotoURL(profile?.photoURL);
 
   useEffect(() => {
     if (!uid || !activeBook) {
@@ -42,8 +47,8 @@ export function useTransactions(
           return {
             ...tx,
             createdByUid: tx.createdByUid || uid,
-            createdByName: tx.createdByName || profile?.displayName || profile?.email || "Unknown user",
-            createdByPhotoURL: tx.createdByPhotoURL || profile?.photoURL || "",
+            createdByName: tx.createdByName || authorName,
+            createdByPhotoURL: tx.createdByPhotoURL || authorPhoto,
           };
         });
         setTransactions(rows);
@@ -55,7 +60,7 @@ export function useTransactions(
       }
     );
     return unsub;
-  }, [uid, activeBook, profile?.displayName, profile?.email, profile?.photoURL]);
+  }, [uid, activeBook, authorName, authorPhoto]);
 
   const addTransaction = useCallback(
     async (tx: NewTransaction) => {
@@ -74,11 +79,11 @@ export function useTransactions(
         ...tx,
         createdAt: Date.now(),
         createdByUid: uid,
-        createdByName: profile?.displayName || profile?.email || "Unknown user",
-        createdByPhotoURL: profile?.photoURL || "",
+        createdByName: authorName,
+        createdByPhotoURL: authorPhoto,
       });
     },
-    [uid, activeBook, profile?.displayName, profile?.email, profile?.photoURL]
+    [uid, activeBook, authorName, authorPhoto]
   );
 
   const deleteTransaction = useCallback(

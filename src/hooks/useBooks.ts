@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { ActiveBook, BookMember, BookRole, JoinRequest, SharedBook } from "../types";
+import { safeDisplayName, safePhotoURL } from "../lib/profile";
 
 type Profile = {
   displayName: string | null;
@@ -28,14 +29,16 @@ export type MyJoinRequest = { bookId: string; status: JoinRequest["status"] };
 
 const activeBookKey = (uid: string) => `sood-ngern-active-book-${uid}`;
 const bookListCacheKey = (uid: string) => `sood-ngern-books-${uid}`;
-const pendingRequestsKey = (uid: string) => `sood-ngern-join-requests-${uid}`;
+/** Older versions kept the pending-request ids only in this browser; they are migrated to Firestore. */
+const legacyPendingKey = (uid: string) => `sood-ngern-join-requests-${uid}`;
+const requestRefDoc = (uid: string, bookId: string) => doc(db, "users", uid, "joinRequestRefs", bookId);
 
-const displayNameOf = (profile?: Profile) => profile?.displayName || profile?.email || "Unknown user";
+const displayNameOf = (profile?: Profile) => safeDisplayName(profile);
 
 function memberFromProfile(profile: Profile | undefined, role: BookRole): BookMember {
   return {
     name: displayNameOf(profile),
-    photoURL: profile?.photoURL || "",
+    photoURL: safePhotoURL(profile?.photoURL),
     role,
     joinedAt: Date.now(),
   };
@@ -93,7 +96,6 @@ export function useBooks(uid: string | undefined, profile?: Profile) {
       return;
     }
     setActiveBookId(window.localStorage.getItem(activeBookKey(uid)) || `personal:${uid}`);
-    setPendingIds(readJson<string[]>(pendingRequestsKey(uid), []));
     setLoaded(false);
 
     // Members-only query — the security rules reject anything broader.
@@ -126,6 +128,26 @@ export function useBooks(uid: string | undefined, profile?: Profile) {
   }, [uid]);
 
   /* ------------------------------- my outgoing join requests ------------------------------- */
+  // Which books I asked to join, stored per user in Firestore (works on every device and lets
+  // account deletion withdraw them all).
+  useEffect(() => {
+    if (!uid) {
+      setPendingIds([]);
+      return;
+    }
+    const legacy = readJson<string[]>(legacyPendingKey(uid), []);
+    if (legacy.length > 0) {
+      Promise.all(legacy.map((id) => setDoc(requestRefDoc(uid, id), { requestedAt: Date.now() })))
+        .then(() => window.localStorage.removeItem(legacyPendingKey(uid)))
+        .catch((err) => console.error("could not migrate pending join requests", err));
+    }
+    return onSnapshot(
+      collection(db, "users", uid, "joinRequestRefs"),
+      (snap) => setPendingIds(snap.docs.map((d) => d.id)),
+      (err) => console.error("join request refs listener failed", err)
+    );
+  }, [uid]);
+
   const pendingKey = pendingIds.join(",");
   useEffect(() => {
     if (!uid || pendingIds.length === 0) {
@@ -145,11 +167,7 @@ export function useBooks(uid: string | undefined, profile?: Profile) {
               delete rest[bookId];
               return rest;
             });
-            setPendingIds((prev) => {
-              const next = prev.filter((id) => id !== bookId);
-              writeJson(pendingRequestsKey(uid), next);
-              return next;
-            });
+            deleteDoc(requestRefDoc(uid, bookId)).catch((err) => console.error("could not clear join request ref", err));
           }
         },
         (err) => console.error("join request listener failed", err)
@@ -229,34 +247,38 @@ export function useBooks(uid: string | undefined, profile?: Profile) {
         rememberActive(`shared:${cleanId}`);
         return;
       }
+      const status = requestStatus[cleanId];
+      if (status === "pending") throw new Error("คุณส่งคำขอเข้าร่วมสมุดนี้ไว้แล้ว กรุณารอเจ้าของอนุมัติ");
+
+      const requestDoc = doc(db, "books", cleanId, "joinRequests", uid);
       try {
-        await setDoc(doc(db, "books", cleanId, "joinRequests", uid), {
+        // A rejected request must be cleared first: only the owner may edit an existing one.
+        if (status === "rejected") await deleteDoc(requestDoc);
+        await setDoc(requestDoc, {
           requesterUid: uid,
           requesterName: displayNameOf(profile),
-          requesterPhotoURL: profile?.photoURL || "",
+          requesterPhotoURL: safePhotoURL(profile?.photoURL),
           requestedAt: Date.now(),
           role: "viewer" as BookRole,
           status: "pending",
         });
+        await setDoc(requestRefDoc(uid, cleanId), { requestedAt: Date.now() });
       } catch (err) {
         if (err instanceof Error && err.message.includes("permission")) {
-          throw new Error("ไม่พบสมุดบัญชีนี้ หรือคุณเป็นสมาชิกอยู่แล้ว");
+          throw new Error("ส่งคำขอไม่สำเร็จ: ไม่พบสมุดนี้ คุณเป็นสมาชิกอยู่แล้ว หรือเคยส่งคำขอไว้แล้ว");
         }
         throw err;
       }
-      setPendingIds((prev) => {
-        const next = prev.includes(cleanId) ? prev : [...prev, cleanId];
-        writeJson(pendingRequestsKey(uid), next);
-        return next;
-      });
     },
-    [uid, profile, sharedBooks, rememberActive]
+    [uid, profile, sharedBooks, requestStatus, rememberActive]
   );
 
   const cancelRequest = useCallback(
     async (bookId: string) => {
       if (!uid) return;
+      // The listener on the request document also clears the per-user reference.
       await deleteDoc(doc(db, "books", bookId, "joinRequests", uid));
+      await deleteDoc(requestRefDoc(uid, bookId));
     },
     [uid]
   );

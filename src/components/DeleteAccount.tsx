@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle, Check, Download, Loader2, Trash2 } from "lucide-react";
 import { User } from "firebase/auth";
 import { T } from "../theme";
 import { useAuth } from "../contexts/AuthContext";
 import { DeletionPlan, DeletionStep, DELETED_USER_NAME, exportPersonalCsv, planAccountDeletion } from "../lib/accountDeletion";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { inputStyle, primaryBtn, secondaryBtn } from "./shared";
 
 /** What the user must type to arm the delete button. */
@@ -56,6 +57,8 @@ function DeleteAccountDialog({ user, onClose }: { user: User; onClose: () => voi
   const [step, setStep] = useState<DeletionStep | null>(null);
   const [error, setError] = useState("");
   const running = step !== null;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +115,7 @@ function DeleteAccountDialog({ user, onClose }: { user: User; onClose: () => voi
       onClick={() => !running && onClose()}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-title"

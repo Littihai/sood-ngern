@@ -81,6 +81,12 @@ export function Dashboard({
 
   const recent = transactions.slice(0, 6);
 
+  // Text alternatives for the charts (the SVGs themselves are hidden from assistive tech).
+  const sum = (rows: { income: number; expense: number }[], key: "income" | "expense") => rows.reduce((s, r) => s + r[key], 0);
+  const weekLabel = `กราฟแท่งรายรับรายจ่าย 7 วันล่าสุด: รายรับรวม ${fmtMoney(sum(days, "income"))} บาท รายจ่ายรวม ${fmtMoney(sum(days, "expense"))} บาท`;
+  const pieLabel = `สัดส่วนรายจ่ายเดือนนี้: ${catData.map((c) => `${c.name} ${expense > 0 ? Math.round((c.value / expense) * 100) : 0}%`).join(", ")}`;
+  const monthLabel = `เปรียบเทียบรายรับรายจ่าย 6 เดือนล่าสุด: ${months.map((m) => `${m.label} สุทธิ ${m.net < 0 ? "ติดลบ " : ""}${fmtMoney(m.net)} บาท`).join(", ")}`;
+
   if (transactions.length === 0) return <EmptyState onAdd={onAdd} />;
 
   return (
@@ -111,7 +117,7 @@ export function Dashboard({
 
       <div className="sn-grid-2">
         <Card title="แนวโน้ม 7 วันล่าสุด">
-          <div style={{ width: "100%", height: 200 }}>
+          <ChartBox label={weekLabel} style={{ width: "100%", height: 200 }}>
             <ResponsiveContainer>
               <BarChart data={days} barGap={3}>
                 <CartesianGrid vertical={false} stroke={T.paperLine} strokeDasharray="3 4" />
@@ -127,7 +133,7 @@ export function Dashboard({
                 <Bar dataKey="expense" fill={T.expense} radius={[6, 6, 0, 0]} maxBarSize={14} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartBox>
         </Card>
 
         <Card title="สัดส่วนรายจ่ายเดือนนี้">
@@ -135,10 +141,10 @@ export function Dashboard({
             <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: T.inkSoft, fontSize: 14 }}>ยังไม่มีรายจ่ายในเดือนนี้</div>
           ) : (
             <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-              <div style={{ width: 150, height: 150, flexShrink: 0, margin: "0 auto" }}>
+              <ChartBox label={pieLabel} style={{ width: 150, height: 150, flexShrink: 0, margin: "0 auto" }}>
                 <ResponsiveContainer>
                   <PieChart>
-                    <Pie data={catData} dataKey="value" nameKey="name" innerRadius={46} outerRadius={72} paddingAngle={3} cornerRadius={4} stroke="none">
+                    <Pie data={catData} dataKey="value" nameKey="name" innerRadius={46} outerRadius={72} paddingAngle={3} cornerRadius={4} stroke="none" rootTabIndex={-1}>
                       {catData.map((c, i) => (
                         <Cell key={i} fill={c.color} />
                       ))}
@@ -146,7 +152,7 @@ export function Dashboard({
                     <Tooltip formatter={(v: number) => `฿${fmtMoney(v)}`} contentStyle={tooltipStyle} />
                   </PieChart>
                 </ResponsiveContainer>
-              </div>
+              </ChartBox>
               <div style={{ flex: 1, minWidth: 190, display: "flex", flexDirection: "column", gap: 10 }}>
                 {catData.slice(0, 5).map((c) => (
                   <CategoryLegendRow key={c.id} cat={c} total={expense} />
@@ -159,7 +165,7 @@ export function Dashboard({
 
       {hasMonthlyData && (
         <Card title="เปรียบเทียบรายรับ-รายจ่าย 6 เดือนล่าสุด">
-          <div style={{ width: "100%", height: 230 }}>
+          <ChartBox label={monthLabel} style={{ width: "100%", height: 230 }}>
             <ResponsiveContainer>
               <BarChart data={months} barGap={4} barCategoryGap="28%">
                 <CartesianGrid vertical={false} stroke={T.paperLine} strokeDasharray="3 4" />
@@ -180,8 +186,14 @@ export function Dashboard({
                 <Bar dataKey="expense" name="expense" fill={T.expense} radius={[6, 6, 0, 0]} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-          <div className="sn-scroll" style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", paddingBottom: 2 }}>
+          </ChartBox>
+          <div
+            className="sn-scroll"
+            role="region"
+            aria-label="ยอดสุทธิรายเดือน (เลื่อนดูได้)"
+            tabIndex={0}
+            style={{ display: "flex", gap: 8, marginTop: 12, overflowX: "auto", paddingBottom: 2 }}
+          >
             {months.map((m) => (
               <div key={m.label} style={{ flex: "1 0 auto", minWidth: 92, textAlign: "center", padding: "8px 6px", borderRadius: 12, background: T.paperDim }}>
                 <div style={{ fontSize: 12, color: T.inkSoft, fontWeight: 600 }}>{m.label}</div>
@@ -204,6 +216,17 @@ export function Dashboard({
           ))}
         </div>
       </Card>
+    </div>
+  );
+}
+
+/** A chart with a text alternative: the drawing is aria-hidden, the wrapper is the labelled image. */
+function ChartBox({ label, style, children }: { label: string; style: React.CSSProperties; children: React.ReactNode }) {
+  return (
+    <div role="img" aria-label={label} style={style}>
+      <div aria-hidden="true" style={{ width: "100%", height: "100%" }}>
+        {children}
+      </div>
     </div>
   );
 }
