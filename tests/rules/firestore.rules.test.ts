@@ -149,6 +149,61 @@ describe("books: transactions", () => {
   it("creator identity cannot be changed", async () => {
     await assertFails(updateDoc(doc(as(EDITOR), "books", BOOK, "transactions", "t1"), { createdByUid: OWNER }));
   });
+
+  describe("anonymising your own entries when you delete your account", () => {
+    const GONE = "ผู้ใช้ที่ลบบัญชี";
+    beforeEach(async () => {
+      // dave is a VIEWER now but used to be an editor: his old entry still carries his identity
+      await seed(async (db) => void (await setDoc(doc(db, "books", BOOK, "transactions", "old-dave"), tx(VIEWER))));
+    });
+    it("works for any current role (a former editor demoted to viewer)", async () => {
+      await assertSucceeds(updateDoc(doc(as(VIEWER), "books", BOOK, "transactions", "old-dave"), { createdByName: GONE, createdByPhotoURL: "" }));
+    });
+    it("only accepts the exact anonymised values and only those two fields", async () => {
+      const ref = () => doc(as(VIEWER), "books", BOOK, "transactions", "old-dave");
+      await assertFails(updateDoc(ref(), { createdByName: "Someone else", createdByPhotoURL: "" }));
+      await assertFails(updateDoc(ref(), { createdByName: GONE, createdByPhotoURL: "https://x.example/a.jpg" }));
+      await assertFails(updateDoc(ref(), { createdByName: GONE, createdByPhotoURL: "", amount: 1 }));
+      await assertFails(updateDoc(ref(), { amount: 1 }));
+    });
+    it("cannot be used on someone else's entry, or by a non-member", async () => {
+      await assertFails(updateDoc(doc(as(VIEWER), "books", BOOK, "transactions", "t1"), { createdByName: GONE, createdByPhotoURL: "" }));
+      await assertFails(updateDoc(doc(as(STRANGER), "books", BOOK, "transactions", "old-dave"), { createdByName: GONE, createdByPhotoURL: "" }));
+    });
+  });
+});
+
+describe("transaction date validation", () => {
+  const path = ["users", OWNER, "transactions"] as const;
+  it("accepts real dates and refuses impossible ones", async () => {
+    await assertSucceeds(setDoc(doc(as(OWNER), ...path, "ok1"), tx(OWNER, { date: "2026-10-31" })));
+    await assertSucceeds(setDoc(doc(as(OWNER), ...path, "ok2"), tx(OWNER, { date: "2028-02-29" })));
+    await assertFails(setDoc(doc(as(OWNER), ...path, "bad1"), tx(OWNER, { date: "2026-13-45" })));
+    await assertFails(setDoc(doc(as(OWNER), ...path, "bad2"), tx(OWNER, { date: "2026-00-10" })));
+    await assertFails(setDoc(doc(as(OWNER), ...path, "bad3"), tx(OWNER, { date: "2026-10-32" })));
+    await assertFails(setDoc(doc(as(OWNER), ...path, "bad4"), tx(OWNER, { date: "" })));
+  });
+});
+
+describe("joinRequestRefs (my outgoing requests, stored per user)", () => {
+  const ref = (uid: string, bookId = BOOK) => ["users", uid, "joinRequestRefs", bookId] as const;
+  it("the owner can create, read and delete their own", async () => {
+    await assertSucceeds(setDoc(doc(as(STRANGER), ...ref(STRANGER)), { requestedAt: now() }));
+    await assertSucceeds(getDoc(doc(as(STRANGER), ...ref(STRANGER))));
+    await assertSucceeds(setDoc(doc(as(STRANGER), ...ref(STRANGER)), { requestedAt: now() })); // re-request overwrites
+    await assertSucceeds(deleteDoc(doc(as(STRANGER), ...ref(STRANGER))));
+  });
+  it("nobody else can touch them, not even the book owner", async () => {
+    await seed(async (db) => void (await setDoc(doc(db, ...ref(STRANGER)), { requestedAt: now() })));
+    await assertFails(getDoc(doc(as(OWNER), ...ref(STRANGER))));
+    await assertFails(setDoc(doc(as(OWNER), ...ref(STRANGER, "x")), { requestedAt: now() }));
+    await assertFails(deleteDoc(doc(as(OWNER), ...ref(STRANGER))));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), ...ref(STRANGER))));
+  });
+  it("only a valid requestedAt is stored (no extra fields)", async () => {
+    await assertFails(setDoc(doc(as(STRANGER), ...ref(STRANGER)), { requestedAt: now(), note: "x" }));
+    await assertFails(setDoc(doc(as(STRANGER), ...ref(STRANGER)), { requestedAt: "yesterday" }));
+  });
 });
 
 describe("join requests", () => {
@@ -203,6 +258,12 @@ describe("join requests", () => {
   it("the requester can withdraw their request", async () => {
     await seed(async (db) => void (await setDoc(doc(db, ...reqPath(STRANGER)), joinReq(STRANGER))));
     await assertSucceeds(deleteDoc(doc(as(STRANGER), ...reqPath(STRANGER))));
+  });
+  it("after a rejection the requester can clear it and ask again, but cannot overwrite it in place", async () => {
+    await seed(async (db) => void (await setDoc(doc(db, ...reqPath(STRANGER)), joinReq(STRANGER, { status: "rejected" }))));
+    await assertFails(setDoc(doc(as(STRANGER), ...reqPath(STRANGER)), joinReq(STRANGER)));
+    await assertSucceeds(deleteDoc(doc(as(STRANGER), ...reqPath(STRANGER))));
+    await assertSucceeds(setDoc(doc(as(STRANGER), ...reqPath(STRANGER)), joinReq(STRANGER)));
   });
 });
 
