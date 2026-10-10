@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useFocusTrap } from "../hooks/useFocusTrap";
 import { Trash2 } from "lucide-react";
 import { T, catById, fmtMoney, fmtDateShort } from "../theme";
 import { Transaction } from "../types";
@@ -98,10 +99,13 @@ export function TxRow({
   onClick,
 }: {
   tx: Transaction;
-  onDelete?: (id: string) => void;
+  /** Omit for read-only users: the delete button is then not rendered at all. */
+  onDelete?: (id: string) => void | Promise<void>;
   onClick?: () => void;
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const cat = catById(tx.category);
   const isIncome = tx.type === "income";
   const title = tx.note ? tx.note : cat.label;
@@ -145,10 +149,24 @@ export function TxRow({
           title="ยืนยันการลบรายการ"
           message={`คุณต้องการลบรายการ "${title}" ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้`}
           confirmLabel="ลบรายการ"
-          onCancel={() => setShowConfirm(false)}
-          onConfirm={() => {
-            onDelete?.(tx.id);
+          error={deleteError}
+          busy={deleting}
+          onCancel={() => {
             setShowConfirm(false);
+            setDeleteError("");
+          }}
+          onConfirm={async () => {
+            setDeleting(true);
+            setDeleteError("");
+            try {
+              await onDelete?.(tx.id);
+              setShowConfirm(false);
+            } catch (err) {
+              console.error(err);
+              setDeleteError(err instanceof Error && err.message ? err.message : "ลบรายการไม่สำเร็จ กรุณาลองอีกครั้ง");
+            } finally {
+              setDeleting(false);
+            }
           }}
         />
       )}
@@ -174,20 +192,27 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel,
+  error,
+  busy,
   onConfirm,
   onCancel,
 }: {
   title: string;
   message: string;
   confirmLabel: string;
+  error?: string;
+  busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef);
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onCancel();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, [onCancel, busy]);
 
   // Rendered in <body>: an animated ancestor would otherwise become the containing block of `position: fixed`.
   return createPortal(
@@ -199,6 +224,7 @@ export function ConfirmDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -208,12 +234,17 @@ export function ConfirmDialog({
       >
         <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>{title}</div>
         <div style={{ fontSize: 14, color: T.inkSoft, marginBottom: 20, lineHeight: 1.5 }}>{message}</div>
+        {error && (
+          <div role="alert" style={{ color: T.expense, fontSize: 13.5, fontWeight: 600, marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onCancel} style={secondaryBtn} autoFocus>
+          <button onClick={onCancel} disabled={busy} style={secondaryBtn} autoFocus>
             ยกเลิก
           </button>
-          <button onClick={onConfirm} style={{ ...primaryBtn, background: T.expense, color: "#fff" }}>
-            {confirmLabel}
+          <button onClick={onConfirm} disabled={busy} style={{ ...primaryBtn, background: T.expense, color: "#fff", opacity: busy ? 0.6 : 1 }}>
+            {busy ? "กำลังลบ..." : confirmLabel}
           </button>
         </div>
       </div>

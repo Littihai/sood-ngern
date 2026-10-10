@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { LogOut } from "lucide-react";
 import { T, todayISO } from "./theme";
 import { Tab } from "./types";
@@ -7,13 +7,15 @@ import { useBooks } from "./hooks/useBooks";
 import { useTransactions } from "./hooks/useTransactions";
 import { Sidebar, BottomNav, TopHeader, LoadingState } from "./components/Layout";
 import { Login } from "./components/Login";
-import { Dashboard } from "./components/Dashboard";
 import { AddForm } from "./components/AddForm";
 import { DailyView } from "./components/DailyView";
 import { SummaryView } from "./components/SummaryView";
 import { ProfileView } from "./components/ProfileView";
 import { BookSwitcher } from "./components/BookSwitcher";
 import { DeleteAccountCard } from "./components/DeleteAccount";
+
+// Recharts (~500 kB) is only needed on the dashboard: load it on demand.
+const Dashboard = lazy(() => import("./components/Dashboard").then((m) => ({ default: m.Dashboard })));
 
 export default function App() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -60,7 +62,9 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
             {!booksLoaded || !loaded ? (
               <LoadingState />
             ) : tab === "dashboard" ? (
-              <Dashboard transactions={transactions} onSeeAll={() => setTab("summary")} onSeeDay={goToDaily} onAdd={() => setTab("add")} />
+              <Suspense fallback={<LoadingState />}>
+                <Dashboard transactions={transactions} onSeeAll={() => setTab("summary")} onSeeDay={goToDaily} onAdd={() => setTab("add")} />
+              </Suspense>
             ) : tab === "add" ? (
               canWriteTransactions ? (
                 <AddForm onSubmit={handleAdd} savedFlash={savedFlash} />
@@ -71,7 +75,7 @@ function SignedInApp({ uid, onSignOut, userDisplayObj }: { uid: string; onSignOu
                 </div>
               )
             ) : tab === "daily" ? (
-              <DailyView transactions={transactions} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onDelete={deleteTransaction} />
+              <DailyView transactions={transactions} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onDelete={canWriteTransactions ? deleteTransaction : undefined} />
             ) : tab === "profile" ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 760 }}>
                 <BookSwitcher
