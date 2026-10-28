@@ -1,4 +1,4 @@
-import { BookOpen, LayoutGrid, Calendar, Plus, LogOut, UserRound, PieChart, Wallet, Sun, Moon, Monitor, Users } from "lucide-react";
+import { BookOpen, LayoutGrid, Calendar, Plus, LogOut, UserRound, PieChart, Sun, Moon, Monitor, Users } from "lucide-react";
 import { User } from "firebase/auth";
 import { T } from "../theme";
 import { Tab } from "../types";
@@ -19,9 +19,7 @@ const PROFILE_ITEM: NavItem = { id: "profile", label: "โปรไฟล์", i
 export function Brand() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <div style={{ width: 38, height: 38, borderRadius: 12, background: T.hero, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0, boxShadow: T.shadow }}>
-        <Wallet size={20} strokeWidth={2.2} />
-      </div>
+      <img src="/favicon.svg" alt="" width={40} height={40} style={{ display: "block", borderRadius: 12, flexShrink: 0, boxShadow: T.shadow }} />
       <div>
         <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: -0.2, lineHeight: 1.2 }}>สมุดเงิน</div>
         <div style={{ fontSize: 12, color: T.inkSoft }}>รายรับ-รายจ่ายส่วนตัว</div>

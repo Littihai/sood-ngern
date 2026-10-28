@@ -1,14 +1,17 @@
 import React from "react";
-import { BarChart3, Users, Zap, Wallet } from "lucide-react";
+import { BarChart3, Check, ShieldCheck, Users, Zap } from "lucide-react";
 import { T } from "../theme";
 import { useAuth } from "../contexts/AuthContext";
 import { ThemeToggle } from "./Layout";
 
 const FEATURES = [
-  { icon: Zap, title: "บันทึกได้ในไม่กี่วินาที", text: "กรอกจำนวน เลือกหมวด จบ — ใช้ได้ทั้งมือถือและคอมพิวเตอร์" },
-  { icon: BarChart3, title: "เห็นภาพรวมด้วยกราฟ", text: "แนวโน้มรายวัน เปรียบเทียบรายเดือน และสัดส่วนรายจ่าย" },
-  { icon: Users, title: "แชร์สมุดกับครอบครัว", text: "เชิญคนอื่นเข้าสมุดร่วม เจ้าของสมุดเป็นผู้อนุมัติ" },
+  { icon: Zap, title: "บันทึกได้ใน 3 ขั้นตอน", text: "ใส่จำนวนเงิน เลือกหมวด กดบันทึก — มี 13 หมวดหมู่และปุ่มจำนวนเงินลัด" },
+  { icon: BarChart3, title: "เห็นภาพรวมทันที", text: "ยอดคงเหลือ % เงินออม กราฟ 7 วัน / 6 เดือน สัดส่วนรายจ่าย และสรุปรายสัปดาห์ รายเดือน" },
+  { icon: Users, title: "สมุดร่วมกับครอบครัวหรือเพื่อน", text: "แชร์สมุดบัญชีเล่มเดียวกัน เจ้าของสมุดอนุมัติคนเข้าร่วม และกำหนดสิทธิ์ดู/แก้ไขได้" },
+  { icon: ShieldCheck, title: "ข้อมูลเป็นของคุณ", text: "แยกเก็บตามบัญชี Google และลบบัญชีพร้อมข้อมูลทั้งหมดได้เองในแอป" },
 ];
+
+const REASSURANCES = ["ใช้ฟรี ทุกคนที่มีบัญชี Google เข้าใช้ได้ทันที", "ใช้ได้ทั้งมือถือและคอมพิวเตอร์ ข้อมูลตรงกันทุกเครื่อง", "ข้อมูลเป็นส่วนตัว รายการของคุณเห็นได้เฉพาะคุณ"];
 
 export function Login() {
   const { signInWithGoogle, accountDeleted, dismissAccountDeleted } = useAuth();
@@ -41,20 +44,19 @@ export function Login() {
         <div aria-hidden="true" style={{ position: "absolute", width: 260, height: 260, borderRadius: "50%", background: "rgba(255,255,255,0.06)", bottom: -90, left: -60 }} />
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
-          <div style={{ width: 42, height: 42, borderRadius: 14, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Wallet size={22} />
-          </div>
+          <img src="/favicon.svg" alt="" width={44} height={44} style={{ display: "block", borderRadius: 14, boxShadow: "0 0 0 2px rgba(255,255,255,0.35)" }} />
           <span style={{ fontWeight: 800, fontSize: 20, letterSpacing: -0.2 }}>สมุดเงิน</span>
         </div>
 
         <div style={{ position: "relative", margin: "40px 0" }}>
           <h1 style={{ fontSize: "clamp(30px, 4.2vw, 46px)", fontWeight: 800, letterSpacing: -1, lineHeight: 1.15, maxWidth: 520 }}>
-            จัดการเงินของคุณ
+            รู้ทุกบาทที่เข้า
             <br />
-            ให้ง่ายในที่เดียว
+            และออก ในแอปเดียว
           </h1>
-          <p style={{ fontSize: 16, opacity: 0.85, marginTop: 14, maxWidth: 460 }}>
-            บันทึกรายรับรายจ่ายทุกวัน ดูแนวโน้มการใช้จ่าย และแชร์สมุดบัญชีกับคนที่คุณไว้ใจ
+          <p style={{ fontSize: 16, opacity: 0.9, marginTop: 14, maxWidth: 480, lineHeight: 1.6 }}>
+            สมุดเงินคือสมุดบัญชีรายรับ-รายจ่ายออนไลน์ที่ใช้ฟรี บันทึกเสร็จในไม่กี่วินาที แล้วดูกราฟสรุปได้ทันทีว่าเดือนนี้ใช้ไปเท่าไร เหลือเก็บเท่าไร
+            จะใช้คนเดียว หรือแชร์สมุดกับครอบครัวและเพื่อนก็ได้
           </p>
         </div>
 
@@ -81,22 +83,32 @@ export function Login() {
               <button onClick={dismissAccountDeleted} style={{ display: "block", marginTop: 4, background: "transparent", border: "none", color: "inherit", fontSize: 12.5, fontWeight: 500, padding: 0, textDecoration: "underline" }}>ปิด</button>
             </div>
           )}
-          <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4 }}>ยินดีต้อนรับ</h2>
-          <p style={{ fontSize: 14, color: T.inkSoft, margin: "6px 0 26px" }}>เข้าสู่ระบบเพื่อเริ่มบันทึกรายรับรายจ่าย</p>
+          <h2 style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.4 }}>เริ่มบันทึกวันนี้</h2>
+          <p style={{ fontSize: 14, color: T.inkSoft, margin: "6px 0 26px" }}>กดปุ่มด้านล่าง เข้าสู่ระบบด้วยบัญชี Google แล้วเริ่มใช้งานได้เลย</p>
           <button
             onClick={handleClick}
             disabled={busy}
             style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, padding: "14px 0", borderRadius: 14, border: `1px solid ${T.paperLine}`, background: T.paper, fontSize: 15, fontWeight: 700, color: T.ink, boxShadow: T.shadow, opacity: busy ? 0.7 : 1 }}
           >
             <GoogleIcon />
-            {busy ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบด้วย Google"}
+            {busy ? "กำลังเริ่มต้น..." : "เริ่มใช้งานด้วย Google"}
           </button>
           {error && (
             <p role="alert" style={{ color: T.expense, fontSize: 13.5, marginTop: 14 }}>
               {error}
             </p>
           )}
-          <p style={{ fontSize: 12, color: T.inkSoft, marginTop: 22 }}>ข้อมูลของคุณถูกแยกเก็บเป็นส่วนตัวตามบัญชี Google</p>
+          <ul style={{ listStyle: "none", margin: "22px 0 0", padding: 0, display: "grid", gap: 8, textAlign: "left" }}>
+            {REASSURANCES.map((text) => (
+              <li key={text} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.inkSoft }}>
+                <Check size={15} color={T.primary} strokeWidth={2.6} aria-hidden="true" style={{ flexShrink: 0 }} />
+                {text}
+              </li>
+            ))}
+          </ul>
+          <p style={{ fontSize: 12, color: T.inkSoft, marginTop: 20 }}>
+            การเข้าสู่ระบบถือว่ายอมรับ <a href="/privacy.html" target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>นโยบายความเป็นส่วนตัว</a>
+          </p>
         </div>
       </main>
     </div>
