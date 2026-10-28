@@ -1,5 +1,5 @@
 import React from "react";
-import { BarChart3, Users, Zap, Wallet } from "lucide-react";
+import { BarChart3, Users, Zap } from "lucide-react";
 import { T } from "../theme";
 import { useAuth } from "../contexts/AuthContext";
 import { ThemeToggle } from "./Layout";
@@ -41,9 +41,7 @@ export function Login() {
         <div aria-hidden="true" style={{ position: "absolute", width: 260, height: 260, borderRadius: "50%", background: "rgba(255,255,255,0.06)", bottom: -90, left: -60 }} />
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
-          <div style={{ width: 42, height: 42, borderRadius: 14, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Wallet size={22} />
-          </div>
+          <img src="/favicon.svg" alt="" width={44} height={44} style={{ display: "block", borderRadius: 14, boxShadow: "0 0 0 2px rgba(255,255,255,0.35)" }} />
           <span style={{ fontWeight: 800, fontSize: 20, letterSpacing: -0.2 }}>สมุดเงิน</span>
         </div>
 
